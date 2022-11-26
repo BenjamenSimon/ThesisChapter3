@@ -1,0 +1,470 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Bovine TB: Descriptive Statistics"
+author: "Benjamen Simon"
+date: "November 2022"
+knit: (function(inputFile, encoding) { 
+          rmarkdown::render(
+            inputFile,
+            encoding = encoding, 
+            output_dir = "../Reports") 
+            })
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{enumerate}
+  - \usepackage{bm}
+  - \usepackage[T1]{fontenc}
+---
+
+# Preamble
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE)
+
+options(scipen=999)
+```
+
+This file is used to collate descriptive statistics for the Bovine TB data.
+
+The packages we will use:
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+```
+
+# Locations
+
+## Counties, Parishes, and Holdings
+
+### The number of parishes and holdings in each county:
+
+```{r Read: Counties structure}
+
+df_count_parishes_and_holdings_per_county <- read_rds('Tables/df_count_parishes_and_holdings_per_county.rds')
+
+```
+
+```{r Review: Counties structure}
+
+df_count_parishes_and_holdings_per_county
+
+sprintf("Total number of counties is %i.", nrow(df_count_parishes_and_holdings_per_county))
+sprintf("Total number of parishes is %i.", sum(df_count_parishes_and_holdings_per_county[,3]))
+sprintf("Total number of holdings is %i.", sum(df_count_parishes_and_holdings_per_county[,4]))
+
+sprintf("Total number of parishes in Cheshire is %i.", df_count_parishes_and_holdings_per_county[6,3])
+sprintf("Total number of holdings in Cheshire is %i.", df_count_parishes_and_holdings_per_county[6,4])
+
+
+```
+
+
+## Premesis Types
+
+### The number of each premesis type in the data:
+
+```{r Read: Premesis Type}
+
+df_count_premesis_type <- read_rds('Tables/df_count_premesis_type.rds')
+
+```
+
+
+```{r Review: Premesis Type}
+
+df_count_premesis_type_prop <- df_count_premesis_type %>% 
+                               mutate(freq = (num_premises_type / sum(num_premises_type )* 100))
+
+
+sprintf("The three most common premises types are: ")
+sprintf("%s with %i accounting for %0.2f%%,", df_count_premesis_type_prop[1,1], df_count_premesis_type_prop[1,2], df_count_premesis_type_prop[1,3])
+sprintf("%s with %i accounting for %0.2f%%,", df_count_premesis_type_prop[2,1], df_count_premesis_type_prop[2,2], df_count_premesis_type_prop[2,3])
+sprintf("%s with %i accounting for %0.2f%%.", df_count_premesis_type_prop[3,1], df_count_premesis_type_prop[3,2], df_count_premesis_type_prop[3,3])
+```
+### The number of each premesis type in Cheshire:
+
+```{r Read: Premesis Type Cheshire}
+
+df_count_premesis_type_cheshire <- read_rds('Tables/df_count_premesis_type_cheshire.rds')
+
+```
+
+```{r Review: Premesis Type Cheshire}
+
+df_count_premesis_type_cheshire_prop <- df_count_premesis_type_cheshire %>% 
+                                        mutate(freq = (num_premises_type / sum(num_premises_type )* 100))
+
+sprintf("The three most common premises types are: ")
+sprintf("%s with %i accounting for %0.2f%%,", df_count_premesis_type_cheshire_prop[1,2], df_count_premesis_type_cheshire_prop[1,3], df_count_premesis_type_cheshire_prop[1,4])
+sprintf("%s with %i accounting for %0.2f%%,", df_count_premesis_type_cheshire_prop[2,2], df_count_premesis_type_cheshire_prop[2,3], df_count_premesis_type_cheshire_prop[2,4])
+sprintf("%s with %i accounting for %0.2f%%.", df_count_premesis_type_cheshire_prop[3,2], df_count_premesis_type_cheshire_prop[3,3], df_count_premesis_type_cheshire_prop[3,4])
+
+```
+
+# Herds
+
+## The number of unique cattle in the UK all time
+
+```{r Read: Unique Cattle}
+
+df_count_unique_cattle <- read_rds('Tables/df_count_unique_cattle.rds')
+
+```
+
+```{r Review: Unique Cattle}
+
+df_count_unique_cattle
+
+sprintf("There are %s unique cattle that were born, died, been moved or tested in the dataset.", prettyNum(nrow(df_count_unique_cattle),big.mark=","))
+
+```
+
+## The number of unique cattle in Cheshire all time
+
+```{r Read: Unique Cattle Cheshire}
+
+df_count_unique_cattle_cheshire <- read_rds('Tables/df_count_unique_cattle_cheshire.rds')
+
+```
+
+```{r Review: Unique Cattle Cheshire}
+
+df_count_unique_cattle_cheshire
+
+sprintf("There are %s unique cattle that were born  in, died in, moved into or out of, or were tested in Cheshire.", prettyNum(nrow(df_count_unique_cattle_cheshire),big.mark=","))
+
+```
+
+# Movements
+
+## The number of unique movements in the UK all time
+
+```{r Read: Unique Movements}
+
+df_count_unique_movements <- read_rds('Tables/df_count_unique_movements.rds')
+
+```
+
+```{r Review: Unique Movements}
+
+df_count_unique_movements
+
+sprintf("There are %s total movements in the data set.", prettyNum(df_count_unique_movements[1, 1],big.mark=","))
+
+```
+
+
+## The number of unique animals moved in the UK all time
+
+```{r Read: Unique Animals Moved}
+
+df_count_unique_animals_moved <- read_rds('Tables/df_count_unique_animals_moved.rds')
+
+```
+
+```{r Review: Unique Animals Moved}
+
+df_count_unique_animals_moved
+
+sprintf("There are %s total unique animals that have been moved in the data set.", prettyNum(df_count_unique_animals_moved[1, 1],big.mark=","))
+
+```
+
+
+
+## The number of unique births in the UK all time
+
+```{r Read: Unique Births}
+
+df_count_unique_births <- read_rds('Tables/df_count_unique_births.rds')
+
+```
+
+```{r Read: Unique Births}
+
+df_count_unique_births
+
+sprintf("There are %s total births in the data set.", prettyNum(df_count_unique_births[1, 1],big.mark=","))
+
+```
+
+## The number of unique deaths in the UK all time
+
+```{r Read: Unique Deaths}
+
+df_count_unique_deaths <- read_rds('Tables/df_count_unique_deaths.rds')
+
+```
+
+```{r Read: Unique Deaths}
+
+df_count_unique_deaths
+
+sprintf("There are %s total births in the data set.", prettyNum(df_count_unique_deaths[1, 1],big.mark=","))
+
+```
+
+## The unique movements into or out of Cheshire all time
+
+```{r Read: Unique Movements Cheshire}
+
+df_cheshire_unique_movements <- read_rds('Tables/df_cheshire_unique_movements.rds')
+
+```
+
+```{r Review: Unique Movements Cheshire}
+
+df_cheshire_unique_movements
+
+sprintf("There are %s unique movements into, within, and out of Cheshire.", prettyNum(nrow(df_cheshire_unique_movements),big.mark=","))
+
+df_cheshire_unique_movements_out_of <- df_cheshire_unique_movements %>% filter(off_county_name == "CHESHIRE", (on_county_name != "CHESHIRE") %>% replace_na(TRUE))
+
+sprintf("There are %s unique movements out of Cheshire.", prettyNum(nrow(df_cheshire_unique_movements_out_of),big.mark=","))
+
+df_cheshire_unique_movements_into <- df_cheshire_unique_movements %>% filter((off_county_name != "CHESHIRE") %>% replace_na(TRUE), on_county_name == "CHESHIRE")
+
+sprintf("There are %s unique movements into Cheshire.", prettyNum(nrow(df_cheshire_unique_movements_into),big.mark=","))
+
+df_cheshire_unique_movements_within <- df_cheshire_unique_movements %>% filter(off_county_name == "CHESHIRE", on_county_name == "CHESHIRE")
+
+sprintf("There are %s unique movements within Cheshire.", prettyNum(nrow(df_cheshire_unique_movements_within),big.mark=","))
+
+```
+
+
+## The unique births in Cheshire all time
+
+```{r Read: Unique Births Cheshire}
+
+df_cheshire_unique_births <- read_rds('Tables/df_cheshire_unique_births.rds')
+
+```
+
+```{r Review: Unique Births Cheshire}
+
+df_cheshire_unique_births
+
+sprintf("There are %s unique births in Cheshire.", prettyNum(nrow(df_cheshire_unique_births),big.mark=","))
+
+```
+
+## The unique deaths in Cheshire all time
+
+```{r Read: Unique Deaths Cheshire}
+
+df_cheshire_unique_deaths <- read_rds('Tables/df_cheshire_unique_deaths.rds')
+
+```
+
+```{r Review: Unique Deaths Cheshire}
+
+df_cheshire_unique_deaths
+
+sprintf("There are %s unique deaths in Cheshire.", prettyNum(nrow(df_cheshire_unique_deaths),big.mark=","))
+
+```
+
+
+## The number of unique animals moved into or out of Cheshire all time
+
+```{r Read: Unique Animals Moved Cheshire}
+
+df_cheshire_count_unique_animals_moved <- read_rds('Tables/df_cheshire_count_unique_animals_moved.rds')
+
+```
+
+```{r Review: Unique Animals Moved Cheshire}
+
+df_cheshire_count_unique_animals_moved
+
+sprintf("There are %s total unique animals moved into, out of, or within Cheshire.", prettyNum(df_cheshire_count_unique_animals_moved[1, 1],big.mark=","))
+
+```
+
+# Tests
+
+## The number of unique tests in the UK all time
+
+```{r Read: Unique Tests}
+
+df_count_unique_tests <- read_rds('Tables/df_count_unique_tests.rds')
+
+```
+
+```{r Review: Unique Tests}
+
+df_count_unique_tests
+
+sprintf("There are %s total unique tests performed in the data set.", prettyNum(df_count_unique_tests[1, 1],big.mark=","))
+
+```
+
+## The number of unique tests in each category in the UK all time
+
+```{r Read: Unique Tests Category}
+
+df_count_unique_test_category <- read_rds('Tables/df_count_unique_test_category.rds')
+
+```
+
+```{r Review: Unique Tests Category}
+
+df_count_unique_test_category_prop <- df_count_unique_test_category %>% 
+                                      mutate(freq = (total_num_tests_all_time / sum(total_num_tests_all_time )* 100))
+
+df_count_unique_test_category_prop
+
+sprintf("The types of test are: ")
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_prop[1,1], prettyNum(df_count_unique_test_category_prop[1,2],big.mark=","), df_count_unique_test_category_prop[1,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_prop[2,1], prettyNum(df_count_unique_test_category_prop[2,2],big.mark=","), df_count_unique_test_category_prop[2,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_prop[3,1], prettyNum(df_count_unique_test_category_prop[3,2],big.mark=","), df_count_unique_test_category_prop[3,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_prop[4,1], prettyNum(df_count_unique_test_category_prop[4,2],big.mark=","), df_count_unique_test_category_prop[4,3])
+```
+
+## The number of unique tests for each reason in the UK all time
+
+```{r Read: Unique Tests Reason}
+
+df_count_unique_test_type <- read_rds('Tables/df_count_unique_test_type.rds')
+
+```
+
+```{r Review: Unique Tests Reason}
+
+df_count_unique_test_type_prop <- df_count_unique_test_type %>% 
+                                      mutate(freq = (total_num_tests_all_time / sum(total_num_tests_all_time )* 100))
+
+df_count_unique_test_type_prop
+
+sprintf("The top 10 reasons of test are: ")
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[1,1], prettyNum(df_count_unique_test_type_prop[1,2],big.mark=","), df_count_unique_test_type_prop[1,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[2,1], prettyNum(df_count_unique_test_type_prop[2,2],big.mark=","), df_count_unique_test_type_prop[2,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[3,1], prettyNum(df_count_unique_test_type_prop[3,2],big.mark=","), df_count_unique_test_type_prop[3,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[4,1], prettyNum(df_count_unique_test_type_prop[4,2],big.mark=","), df_count_unique_test_type_prop[4,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[5,1], prettyNum(df_count_unique_test_type_prop[5,2],big.mark=","), df_count_unique_test_type_prop[5,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[6,1], prettyNum(df_count_unique_test_type_prop[6,2],big.mark=","), df_count_unique_test_type_prop[6,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[7,1], prettyNum(df_count_unique_test_type_prop[7,2],big.mark=","), df_count_unique_test_type_prop[7,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[8,1], prettyNum(df_count_unique_test_type_prop[8,2],big.mark=","), df_count_unique_test_type_prop[8,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[9,1], prettyNum(df_count_unique_test_type_prop[9,2],big.mark=","), df_count_unique_test_type_prop[9,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_prop[10,1], prettyNum(df_count_unique_test_type_prop[10,2],big.mark=","), df_count_unique_test_type_prop[10,3])
+
+sprintf("The other %i test reasons account for the other %0.2f%%", nrow(df_count_unique_test_type_prop)-10, 100-sum(df_count_unique_test_type_prop[1:10, 3]))
+
+```
+
+## The number of unique animals tested in the UK all time
+
+```{r Read: Unique Animals Tested}
+
+df_count_unique_animals_tested <- read_rds('Tables/df_count_unique_animals_tested.rds')
+
+```
+
+```{r Review: Unique Animals Tested}
+
+df_count_unique_animals_tested
+
+sprintf("There are %s total unique animals tested in the data set.", prettyNum(df_count_unique_animals_tested[1, 1],big.mark=","))
+
+```
+
+
+## The tests in Cheshire all time
+
+```{r Read: Cheshire tests}
+
+df_cheshire_tests <- read_rds('Tables/df_cheshire_tests.rds')
+
+```
+
+```{r Review: Cheshire tests}
+
+df_cheshire_tests
+
+sprintf("There are %s unique tests in Cheshire.", prettyNum(nrow(df_cheshire_tests),big.mark=","))
+
+```
+
+## The number of unique tests in each category in Chesire all time
+
+```{r Read: Unique Tests Category Cheshire}
+
+df_count_unique_test_category_cheshire <- read_rds('Tables/df_count_unique_test_category_cheshire.rds')
+
+```
+
+```{r Review: Unique Tests Category Cheshire}
+
+df_count_unique_test_category_cheshire_prop <- df_count_unique_test_category_cheshire %>% 
+                                      mutate(freq = (total_num_tests_all_time / sum(total_num_tests_all_time )* 100))
+
+df_count_unique_test_category_cheshire_prop
+
+sprintf("The types of test are: ")
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_cheshire_prop[1,1], prettyNum(df_count_unique_test_category_cheshire_prop[1,2],big.mark=","), df_count_unique_test_category_cheshire_prop[1,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_cheshire_prop[2,1], prettyNum(df_count_unique_test_category_cheshire_prop[2,2],big.mark=","), df_count_unique_test_category_cheshire_prop[2,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_cheshire_prop[3,1], prettyNum(df_count_unique_test_category_cheshire_prop[3,2],big.mark=","), df_count_unique_test_category_cheshire_prop[3,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_category_cheshire_prop[4,1], prettyNum(df_count_unique_test_category_cheshire_prop[4,2],big.mark=","), df_count_unique_test_category_cheshire_prop[4,3])
+
+```
+
+## The number of unique tests for each reason in Cheshire all time
+
+```{r Read: Unique Tests Reason Cheshire}
+
+df_count_unique_test_type_cheshire <- read_rds('Tables/df_count_unique_test_type_cheshire.rds')
+
+```
+
+```{r Review: Unique Tests Reason Cheshire}
+
+df_count_unique_test_type_cheshire_prop <- df_count_unique_test_type_cheshire %>% 
+                                      mutate(freq = (total_num_tests_all_time / sum(total_num_tests_all_time )* 100))
+
+df_count_unique_test_type_cheshire_prop
+
+sprintf("The top 10 reasons of test are: ")
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[1,1], prettyNum(df_count_unique_test_type_cheshire_prop[1,2],big.mark=","), df_count_unique_test_type_cheshire_prop[1,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[2,1], prettyNum(df_count_unique_test_type_cheshire_prop[2,2],big.mark=","), df_count_unique_test_type_cheshire_prop[2,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[3,1], prettyNum(df_count_unique_test_type_cheshire_prop[3,2],big.mark=","), df_count_unique_test_type_cheshire_prop[3,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[4,1], prettyNum(df_count_unique_test_type_cheshire_prop[4,2],big.mark=","), df_count_unique_test_type_cheshire_prop[4,3])
+sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[5,1], prettyNum(df_count_unique_test_type_cheshire_prop[5,2],big.mark=","), df_count_unique_test_type_cheshire_prop[5,3])
+# sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[6,1], prettyNum(df_count_unique_test_type_cheshire_prop[6,2],big.mark=","), df_count_unique_test_type_cheshire_prop[6,3])
+# sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[7,1], prettyNum(df_count_unique_test_type_cheshire_prop[7,2],big.mark=","), df_count_unique_test_type_cheshire_prop[7,3])
+# sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[8,1], prettyNum(df_count_unique_test_type_cheshire_prop[8,2],big.mark=","), df_count_unique_test_type_cheshire_prop[8,3])
+# sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[9,1], prettyNum(df_count_unique_test_type_cheshire_prop[9,2],big.mark=","), df_count_unique_test_type_cheshire_prop[9,3])
+# sprintf("%s with %s accounting for %0.2f%%,", df_count_unique_test_type_cheshire_prop[10,1], prettyNum(df_count_unique_test_type_cheshire_prop[10,2],big.mark=","), df_count_unique_test_type_cheshire_prop[10,3])
+
+sprintf("The other %i test reasons account for the other %0.2f%%", nrow(df_count_unique_test_type_cheshire_prop)-5, 100-sum(df_count_unique_test_type_cheshire_prop[1:5, 3]))
+
+```
+
+## The number of unique animals tested in Cheshire all time
+
+```{r Read: Unique Animals Tested Cheshire}
+
+df_count_unique_animals_tested_cheshire <- read_rds('Tables/df_count_unique_animals_tested_cheshire.rds')
+
+```
+
+```{r Review: Unique Animals Tested Cheshire}
+
+df_count_unique_animals_tested_cheshire
+
+sprintf("There are %s total unique animals tested in Cheshire.", prettyNum(df_count_unique_animals_tested_cheshire[1, 1],big.mark=","))
+
+```
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,701 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Bovine TB: Creating SQL Tables"
+author: "Benjamen Simon"
+date: "November 2022"
+knit: (function(inputFile, encoding) { 
+          rmarkdown::render(
+            inputFile,
+            encoding = encoding, 
+            output_dir = "../Reports") 
+            })
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{enumerate}
+  - \usepackage{bm}
+  - \usepackage[T1]{fontenc}
+---
+
+
+# Preamble
+
+This file is used to create and extract tables from the Bovine TB database I have set up, using SQL queries.
+
+The packages we will use:
+
+```{r setup, include=FALSE}
+library("RPostgreSQL") # Used to connect to and query the database
+
+library(tidyverse)
+library(ggplot2)
+```
+
+Connecting to the database:
+
+```{r Connecting to the DB, echo= FALSE}
+ 
+# Create a connection
+# Save the password that we can "hide" it as best as we can by collapsing it
+pw <- {
+  "BtbPhD2019"
+}
+ 
+# Loads the PostgreSQL driver
+drv <- dbDriver("PostgreSQL")
+
+# Creates a connection to the postgres database
+# Note that "con" will be used later in each connection to the database
+con <- dbConnect(drv, dbname = "uk_btb",
+                 host = "fhm-chicas-gis.lancs.ac.uk", port = 5432,
+                 user = "simonb", password = pw)
+
+rm(pw) # Removes the password
+ 
+# Check for the locations_tbl
+dbExistsTable(con, "locations_tbl")
+# TRUE
+
+```
+
+```{r, Disconnecting from the DB, echo= FALSE, eval = FALSE}
+# Close the connection
+# Run at the end
+dbDisconnect(con)
+dbUnloadDriver(drv)
+```
+
+
+
+# Locations
+
+## Counties, Parishes, and Holdings
+
+### The number of parishes and holdings in each county:
+
+```{r Query: Counties structure, eval = FALSE}
+
+df_count_parishes_and_holdings_per_county = dbGetQuery(con, 
+    "SELECT loc2.county_name, loc2.county, count(loc2.parish) AS num_parishes, SUM(loc2.num_holdings_in_parish) AS num_holdings
+     FROM (
+    		    SELECT loc.county_name, loc.county, loc.parish, count(loc.parish) AS num_holdings_in_parish
+    		    FROM (
+    				       SELECT DISTINCT cph, county, parish, holding, county_name FROM locations_extended_tbl
+    			       ) loc
+    		    GROUP BY loc.county, loc.parish, loc.county_name
+    		    ORDER BY loc.county, loc.parish
+    	    ) loc2
+     GROUP BY loc2.county, loc2.county_name
+     ORDER BY loc2.county"
+    )
+
+```
+
+```{r Save: Counties structure, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_parishes_and_holdings_per_county, 'Tables/df_count_parishes_and_holdings_per_county.rds')
+
+```
+
+```{r Read: Counties structure}
+
+df_count_parishes_and_holdings_per_county <- read_rds('Tables/df_count_parishes_and_holdings_per_county.rds')
+
+df_count_parishes_and_holdings_per_county
+
+```
+
+
+
+
+## Premesis Types
+
+### The number of each premesis type in the data:
+
+```{r Query: Premesis Type, eval = FALSE}
+
+df_count_premesis_type = dbGetQuery(con, 
+    "SELECT loc.premises_type, count(loc.premises_type) AS num_premises_type
+     FROM (
+		        SELECT DISTINCT cph, county, parish, holding, county_name, premises_type FROM locations_extended_tbl
+	        ) loc
+    GROUP BY loc.premises_type
+    ORDER BY num_premises_type DESC"
+    )
+
+```
+
+```{r Save: Premesis Type, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_premesis_type, 'Tables/df_count_premesis_type.rds')
+
+```
+
+```{r Read: Premesis Type}
+
+df_count_premesis_type <- read_rds('Tables/df_count_premesis_type.rds')
+
+df_count_premesis_type
+
+```
+
+
+### The number of each premesis type in Cheshire:
+
+```{r Query: Premesis Type Cheshire, eval = FALSE}
+
+df_count_premesis_type_cheshire = dbGetQuery(con, 
+    "SELECT loc.county_name, loc.premises_type, count(loc.premises_type) AS num_premises_type
+     FROM (
+		        SELECT DISTINCT cph, county, parish, holding, county_name, premises_type FROM locations_extended_tbl
+		        WHERE county_name = 'CHESHIRE'
+	        ) loc
+     GROUP BY loc.premises_type, loc.county_name
+     ORDER BY num_premises_type DESC"
+    )
+
+```
+
+```{r Save: Premesis Type Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_premesis_type_cheshire, 'Tables/df_count_premesis_type_cheshire.rds')
+
+```
+
+```{r Read: Premesis Type Cheshire}
+
+df_count_premesis_type_cheshire <- read_rds('Tables/df_count_premesis_type_cheshire.rds')
+
+df_count_premesis_type_cheshire
+
+```
+
+
+# Herds
+
+## The number of unique cattle in the UK all time
+
+```{r Query: Unique Cattle, eval = FALSE}
+
+df_count_unique_cattle = dbGetQuery(con, 
+    "SELECT eartag, count(eartag) AS count_eartag
+     FROM animal_details_v2_tbl
+     GROUP BY eartag
+     ORDER BY count_eartag DESC
+     "
+    )
+
+```
+
+```{r Save: Unique Cattle, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_cattle, 'Tables/df_count_unique_cattle.rds')
+
+```
+
+```{r Read: Unique Cattle}
+
+df_count_unique_cattle <- read_rds('Tables/df_count_unique_cattle.rds')
+
+df_count_unique_cattle
+
+```
+
+
+## The number of unique cattle in Cheshire all time
+
+```{r Query: Unique Cattle Cheshire, eval = FALSE}
+
+# TO FIX: Query
+
+df_count_unique_cattle_cheshire = dbGetQuery(con, 
+    "SELECT ADv2.eartag, ADv2.dob, ADv2.dod,
+            Mext.movement_date, Mext.off_cph, Mext.on_cph, Mext.birth, Mext.death, Mext.off_county_name, Mext.on_county_name 
+     FROM animal_details_v2_tbl ADv2
+      INNER JOIN movement_extended_tbl Mext ON (Mext.eartag = ADv2.eartag)
+     WHERE Mext.off_county_name = 'CHESHIRE' OR Mext.on_county_name = 'CHESHIRE'"
+    )
+
+```
+
+```{r Save: Unique Cattle Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_cattle_cheshire, 'Tables/df_count_unique_cattle_cheshire.rds')
+
+```
+
+```{r Read: Unique Cattle Cheshire}
+
+df_count_unique_cattle_cheshire <- read_rds('Tables/df_count_unique_cattle_cheshire.rds')
+
+df_count_unique_cattle_cheshire
+
+```
+
+
+
+# Movements
+
+## The number of unique movements in the UK all time
+
+```{r Query: Unique Movements, eval = FALSE}
+
+df_count_unique_movements = dbGetQuery(con, 
+    "SELECT COUNT(*) as total_num_movements_all_time
+     FROM moves_no_dups_with_sameday_death_tbl
+     "
+    )
+
+```
+
+```{r Save: Unique Movements, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_movements, 'Tables/df_count_unique_movements.rds')
+
+```
+
+```{r Read: Unique Movements}
+
+df_count_unique_movements <- read_rds('Tables/df_count_unique_movements.rds')
+
+df_count_unique_movements
+
+```
+
+
+## The number of unique animals moved in the UK all time
+
+```{r Query: Unique Animals Moved, eval = FALSE}
+
+df_count_unique_animals_moved = dbGetQuery(con, 
+    "SELECT COUNT(DISTINCT eartag) as total_num_unique_animals_moved_all_time
+     FROM moves_no_dups_with_sameday_death_tbl
+     "
+    )
+
+```
+
+```{r Save: Unique Animals Moved, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_animals_moved, 'Tables/df_count_unique_animals_moved.rds')
+
+```
+
+```{r Read: Unique Animals Moved}
+
+df_count_unique_animals_moved <- read_rds('Tables/df_count_unique_animals_moved.rds')
+
+df_count_unique_animals_moved
+
+```
+
+
+
+
+## The number of unique births in the UK all time
+
+```{r Query: Unique Births, eval = FALSE}
+
+df_count_unique_births = dbGetQuery(con, 
+    "SELECT COUNT(*) as total_num_births_all_time
+     FROM births_no_dups_tbl
+     "
+    )
+
+```
+
+```{r Save: Unique Births, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_births, 'Tables/df_count_unique_births.rds')
+
+```
+
+```{r Read: Unique Births}
+
+df_count_unique_births <- read_rds('Tables/df_count_unique_births.rds')
+
+df_count_unique_births
+
+```
+
+
+
+## The number of unique deaths in the UK all time
+
+```{r Query: Unique Deaths, eval = FALSE}
+
+df_count_unique_deaths = dbGetQuery(con, 
+    "SELECT COUNT(*) as total_num_deaths_all_time
+     FROM deaths_no_dups_tbl
+     "
+    )
+
+```
+
+```{r Save: Unique Deaths, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_deaths, 'Tables/df_count_unique_deaths.rds')
+
+```
+
+```{r Read: Unique Deaths}
+
+df_count_unique_deaths <- read_rds('Tables/df_count_unique_deaths.rds')
+
+df_count_unique_deaths
+
+```
+
+## The unique movements into or out of Cheshire all time
+
+```{r Query: Unique Movements Cheshire, eval = FALSE}
+
+df_cheshire_unique_movements = dbGetQuery(con, 
+    "SELECT *
+     FROM moves_no_dups_with_sameday_death_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Unique Movements Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_cheshire_unique_movements, 'Tables/df_cheshire_unique_movements.rds')
+
+```
+
+```{r Read: Unique Movements Cheshire}
+
+df_cheshire_unique_movements <- read_rds('Tables/df_cheshire_unique_movements.rds')
+
+df_cheshire_unique_movements
+
+```
+
+
+## The unique births in Cheshire all time
+
+```{r Query: Unique Births Cheshire, eval = FALSE}
+
+df_cheshire_unique_births = dbGetQuery(con, 
+    "SELECT *
+     FROM births_no_dups_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Unique Births Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_cheshire_unique_births, 'Tables/df_cheshire_unique_births.rds')
+
+```
+
+```{r Read: Unique Births Cheshire}
+
+df_cheshire_unique_births <- read_rds('Tables/df_cheshire_unique_births.rds')
+
+df_cheshire_unique_births
+
+```
+
+
+## The unique deaths in Cheshire all time
+
+```{r Query: Unique Deaths Cheshire, eval = FALSE}
+
+df_cheshire_unique_deaths = dbGetQuery(con, 
+    "SELECT *
+     FROM deaths_no_dups_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Unique Deaths Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_cheshire_unique_deaths, 'Tables/df_cheshire_unique_deaths.rds')
+
+```
+
+```{r Read: Unique Deaths Cheshire}
+
+df_cheshire_unique_deaths <- read_rds('Tables/df_cheshire_unique_deaths.rds')
+
+df_cheshire_unique_deaths
+
+```
+
+
+## The number of unique animals moved into or out of Cheshire all time
+
+```{r Query: Unique Animals Moved Cheshire, eval = FALSE}
+
+df_cheshire_count_unique_animals_moved = dbGetQuery(con, 
+    "SELECT COUNT(DISTINCT eartag) as total_num_unique_animals_moved_all_time
+     FROM moves_no_dups_with_sameday_death_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Unique Animals Moved Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_cheshire_count_unique_animals_moved, 'Tables/df_cheshire_count_unique_animals_moved.rds')
+
+```
+
+```{r Read: Unique Animals Moved Cheshire}
+
+df_cheshire_count_unique_animals_moved <- read_rds('Tables/df_cheshire_count_unique_animals_moved.rds')
+
+df_cheshire_count_unique_animals_moved
+
+```
+
+
+
+
+
+# Tests
+
+## The number of unique tests in the UK all time
+
+```{r Query: Unique Tests, eval = FALSE}
+
+df_count_unique_tests = dbGetQuery(con, 
+    "SELECT COUNT(*) as total_num_tests_all_time
+     FROM tests_no_dups
+     "
+    )
+
+```
+
+```{r Save: Unique Tests, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_tests, 'Tables/df_count_unique_tests.rds')
+
+```
+
+```{r Read: Unique Tests}
+
+df_count_unique_tests <- read_rds('Tables/df_count_unique_tests.rds')
+
+df_count_unique_tests
+
+```
+
+## The number of unique tests in each category in the UK all time
+
+```{r Query: Unique Test Category, eval = FALSE}
+
+df_count_unique_test_category = dbGetQuery(con, 
+    "SELECT category, COUNT(category) as total_num_tests_all_time
+     FROM tests_no_dups
+     GROUP BY category
+     ORDER BY total_num_tests_all_time DESC
+     "
+    )
+
+```
+
+```{r Save: Unique Tests Category, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_test_category, 'Tables/df_count_unique_test_category.rds')
+
+```
+
+```{r Read: Unique Tests Category}
+
+df_count_unique_test_category <- read_rds('Tables/df_count_unique_test_category.rds')
+
+df_count_unique_test_category
+
+```
+
+## The number of unique tests for each reason in the UK all time
+
+```{r Query: Unique Test Reason, eval = FALSE}
+
+df_count_unique_test_type = dbGetQuery(con, 
+    "SELECT test_type, COUNT(test_type) as total_num_tests_all_time
+     FROM tests_no_dups
+     GROUP BY test_type
+     ORDER BY total_num_tests_all_time DESC
+     "
+    )
+
+```
+
+```{r Save: Unique Tests Reason, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_test_type, 'Tables/df_count_unique_test_type.rds')
+
+```
+
+```{r Read: Unique Tests Reason}
+
+df_count_unique_test_type <- read_rds('Tables/df_count_unique_test_type.rds')
+
+df_count_unique_test_type
+
+```
+
+
+## The number of unique animals tested in the UK all time
+
+```{r Query: Unique Animals Tested, eval = FALSE}
+
+df_count_unique_animals_tested = dbGetQuery(con, 
+    "SELECT COUNT(DISTINCT eartag) as total_num_unique_animals_tested_all_time
+     FROM tests_no_dups
+     "
+    )
+
+```
+
+```{r Save: Unique Animals Tested, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_animals_tested, 'Tables/df_count_unique_animals_tested.rds')
+
+```
+
+```{r Read: Unique Animals Tested}
+
+df_count_unique_animals_tested <- read_rds('Tables/df_count_unique_animals_tested.rds')
+
+df_count_unique_animals_tested
+
+```
+
+
+## The tests in Cheshire all time
+
+```{r Query: Cheshire tests, eval = FALSE}
+
+df_cheshire_tests = dbGetQuery(con, 
+    "SELECT *
+     FROM tests_no_dups
+     WHERE county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Cheshire tests, eval = FALSE, echo = FALSE}
+
+saveRDS(df_cheshire_tests, 'Tables/df_cheshire_tests.rds')
+
+```
+
+```{r Read: Cheshire tests}
+
+df_cheshire_tests <- read_rds('Tables/df_cheshire_tests.rds')
+
+df_cheshire_tests
+
+```
+
+
+## The number of unique tests in each category in Chesire all time
+
+```{r Query: Unique Test Category Cheshire, eval = FALSE}
+
+df_count_unique_test_category_cheshire = dbGetQuery(con, 
+    "SELECT category, COUNT(category) as total_num_tests_all_time
+     FROM (SELECT *
+           FROM tests_no_dups
+           WHERE county_name = 'CHESHIRE') as top
+     GROUP BY category
+     ORDER BY total_num_tests_all_time DESC
+     "
+    )
+
+```
+
+```{r Save: Unique Tests Category Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_test_category_cheshire, 'Tables/df_count_unique_test_category_cheshire.rds')
+
+```
+
+```{r Read: Unique Tests Category Cheshire}
+
+df_count_unique_test_category_cheshire <- read_rds('Tables/df_count_unique_test_category_cheshire.rds')
+
+df_count_unique_test_category_cheshire
+
+```
+
+## The number of unique tests for each reason in Cheshire all time
+
+```{r Query: Unique Test Reason Cheshire, eval = FALSE}
+
+df_count_unique_test_type_cheshire = dbGetQuery(con, 
+    "SELECT test_type, COUNT(test_type) as total_num_tests_all_time
+     FROM (SELECT *
+           FROM tests_no_dups
+           WHERE county_name = 'CHESHIRE') as top
+     GROUP BY test_type
+     ORDER BY total_num_tests_all_time DESC
+     "
+    )
+
+```
+
+```{r Save: Unique Tests Reason Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_test_type_cheshire, 'Tables/df_count_unique_test_type_cheshire.rds')
+
+```
+
+```{r Read: Unique Tests Reason Cheshire}
+
+df_count_unique_test_type_cheshire <- read_rds('Tables/df_count_unique_test_type_cheshire.rds')
+
+df_count_unique_test_type_cheshire
+
+```
+
+## The number of unique animals tested in Cheshire all time
+
+```{r Query: Unique Animals Tested Cheshire, eval = FALSE}
+
+df_count_unique_animals_tested_cheshire = dbGetQuery(con, 
+    "SELECT COUNT(DISTINCT eartag) as total_num_unique_animals_tested_all_time
+     FROM (SELECT *
+           FROM tests_no_dups
+           WHERE county_name = 'CHESHIRE') as top
+     "
+    )
+
+```
+
+```{r Save: Unique Animals Tested Cheshire, eval = FALSE, echo = FALSE}
+
+saveRDS(df_count_unique_animals_tested_cheshire, 'Tables/df_count_unique_animals_tested_cheshire.rds')
+
+```
+
+```{r Read: Unique Animals Tested Cheshire}
+
+df_count_unique_animals_tested_cheshire <- read_rds('Tables/df_count_unique_animals_tested_cheshire.rds')
+
+df_count_unique_animals_tested_cheshire
+
+```
+
+
+
+
+
+
+
+
+
+
