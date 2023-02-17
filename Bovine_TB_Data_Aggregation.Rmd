@@ -1,0 +1,637 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Bovine TB: Data Aggregation"
+author: "Benjamen Simon"
+date: "January 2023"
+knit: (function(inputFile, encoding) { 
+          rmarkdown::render(
+            inputFile,
+            encoding = encoding, 
+            output_dir = "../Reports") 
+            })
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{enumerate}
+  - \usepackage{bm}
+  - \usepackage[T1]{fontenc}
+---
+
+# Preamble
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE)
+
+options(scipen=999)
+```
+
+This file is used to process the Bovine Tuberculosis data from the APHA, aggregating it to the farm and week level, for use in the inference model. This file focuses on Cheshire.
+
+The packages we will use:
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(RPostgreSQL)
+library(lubridate)
+```
+
+Connecting to the database
+
+```{r Connecting to the DB, echo= FALSE, eval= FALSE}
+
+# Save the password that we can "hide" it as best as we can by collapsing it
+pw <- {
+  "BtbPhD2019"
+}
+ 
+# Loads the PostgreSQL driver
+drv <- dbDriver("PostgreSQL")
+
+# Creates a connection to the postgres database
+# Note that "con" will be used later in each connection to the database
+con <- dbConnect(drv, dbname = "uk_btb",
+                 host = "fhm-chicas-gis.lancs.ac.uk", port = 5432,
+                 user = "simonb", password = pw)
+
+rm(pw) # Removes the password
+ 
+# Check for the locations_tbl
+dbExistsTable(con, "locations_tbl")
+# TRUE
+
+```
+
+# Download the Data
+
+## Locations
+
+```{r Cheshire Data: Locations, eval = FALSE}
+
+df_holdings_cheshire = dbGetQuery(con, 
+                                    "SELECT DISTINCT cph, county, parish, holding, county_name
+                                     FROM locations_extended_tbl
+                                     WHERE county_name = 'CHESHIRE' AND premises_type = 'AH'
+                                    ")
+
+```
+
+```{r Save: Cheshire Data: Locations, eval = FALSE, echo = FALSE}
+
+saveRDS(df_holdings_cheshire, 'Data/df_holdings_cheshire.rds')
+
+```
+
+
+## Historic Herd Size
+
+```{r Cheshire Data: Historical Herd, eval = FALSE}
+
+df_historical_herd_cheshire = dbGetQuery(con, 
+                                          "SELECT hist.cph, loc.county, loc.parish, loc.holding, loc.county_name, hist.year, hist.month, hist.num_animals
+                                           FROM historic_herd_tbl hist
+                                           INNER JOIN (SELECT DISTINCT cph, county, parish, holding, county_name
+                                                          FROM locations_extended_tbl
+                                                          WHERE county_name = 'CHESHIRE' AND premises_type = 'AH') loc
+                                                   ON (hist.cph = loc.cph)
+                                          ")
+
+```
+
+```{r Save: Cheshire Data: Historical Herd, eval = FALSE, echo = FALSE}
+
+# Data Cleaning:
+# Summarise the data to have at most 1 row per cph per month
+# One count is often very small and the other much larger, so choosing to add
+df_historical_herd_cheshire_clean <-
+  df_historical_herd_cheshire %>% 
+  group_by(cph, county, parish, holding, county_name, year, month) %>% 
+  summarise(num_animals = sum(num_animals)) %>% 
+  ungroup()
+
+saveRDS(df_historical_herd_cheshire_clean, 'Data/df_historical_herd_cheshire.rds')
+
+```
+
+
+## Movements
+
+```{r Cheshire Data: Movements, eval = FALSE}
+
+df_unique_movements_cheshire = dbGetQuery(con, 
+                                            "SELECT eartag, movement_date, movement_id, 
+                                                    off_cph, off_county, off_parish, off_holding, off_county_name, 
+                                                    on_cph, on_county, on_parish, on_holding, on_county_name, 
+                                                    movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+                                             FROM moves_no_dups_with_sameday_death_tbl
+                                             WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+                                            ")
+
+```
+
+```{r Save: Cheshire Data: Movements, eval = FALSE, echo = FALSE}
+
+saveRDS(df_unique_movements_cheshire, 'Data/df_unique_movements_cheshire.rds')
+
+```
+
+
+## Births
+
+```{r Cheshire Data: Births, eval = FALSE}
+
+df_unique_births_cheshire = dbGetQuery(con, 
+    "SELECT eartag, movement_date, 
+            off_cph, off_county, off_parish, off_holding, off_county_name, 
+            on_cph, on_county, on_parish, on_holding, on_county_name, 
+            movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+     FROM births_no_dups_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Cheshire Data: Births, eval = FALSE, echo = FALSE}
+
+saveRDS(df_unique_births_cheshire, 'Data/df_unique_births_cheshire.rds')
+
+```
+
+
+## Deaths
+
+```{r Cheshire Data: Deaths, eval = FALSE}
+
+df_unique_deaths_cheshire = dbGetQuery(con, 
+    "SELECT eartag, movement_date, 
+            off_cph, off_county, off_parish, off_holding, off_county_name, 
+            on_cph, on_county, on_parish, on_holding, on_county_name, 
+            movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+     FROM deaths_no_dups_tbl
+     WHERE off_county_name = 'CHESHIRE' OR on_county_name = 'CHESHIRE'
+     "
+    )
+
+```
+
+```{r Save: Cheshire Data: Deaths, eval = FALSE, echo = FALSE}
+
+saveRDS(df_unique_deaths_cheshire, 'Data/df_unique_deaths_cheshire.rds')
+
+```
+
+
+## Tests
+
+```{r Cheshire Data: Tests, eval = FALSE}
+
+df_unique_tests_cheshire = dbGetQuery(con, 
+    "SELECT *
+     FROM tests_no_dups
+     WHERE county_name = 'CHESHIRE'
+    ")
+
+```
+
+```{r Save: Cheshire Data: Tests, eval = FALSE, echo = FALSE}
+
+saveRDS(df_unique_tests_cheshire, 'Data/df_unique_tests_cheshire.rds')
+
+```
+
+
+# Load the Data
+
+```{r Read: Locations Cheshire}
+
+df_holdings_cheshire <- read_rds('Data/df_holdings_cheshire.rds')
+
+```
+
+```{r Read: Historical Herd Cheshire}
+
+df_historical_herd_cheshire <- read_rds('Data/df_historical_herd_cheshire.rds')
+
+```
+
+```{r Read: Movements Cheshire}
+
+df_unique_movements_cheshire <- read_rds('Data/df_unique_movements_cheshire.rds')
+
+```
+
+```{r Read: Births Cheshire}
+
+df_unique_births_cheshire <- read_rds('Data/df_unique_births_cheshire.rds')
+
+```
+
+```{r Read: Deaths Cheshire}
+
+df_unique_deaths_cheshire <- read_rds('Data/df_unique_deaths_cheshire.rds')
+
+```
+
+```{r Read: Tests Cheshire}
+
+df_unique_tests_cheshire <- read_rds('Data/df_unique_tests_cheshire.rds')
+
+```
+
+
+# Add week id information
+
+```{r}
+# Aggregate movements to week
+
+min_date_movements = min(df_unique_movements_cheshire$movement_date)
+min_date_births = min(df_unique_births_cheshire$movement_date)
+min_date_deaths = min(df_unique_deaths_cheshire$movement_date)
+min_date_testing = min(df_unique_tests_cheshire$test_date)
+
+max_date_movements = max(df_unique_movements_cheshire$movement_date)
+max_date_births = max(df_unique_births_cheshire$movement_date)
+max_date_deaths = max(df_unique_deaths_cheshire$movement_date)
+max_date_testing = max(df_unique_tests_cheshire$test_date)
+
+min_date = min(min_date_movements, min_date_births, min_date_deaths, min_date_testing)
+max_date = max(max_date_movements, max_date_births, max_date_deaths, max_date_testing)
+
+min_date # Sunday
+max_date # Wednesday
+
+```
+```{r}
+date_seq = seq(min_date, max_date, by = 1)
+
+length(date_seq) %/% 7 #  395 full weeks
+length(date_seq) %% 7 # 4 remaining days
+
+weeks = c(rep(1:395, each = 7), rep(396, 4))
+
+df_week = data.frame(date = date_seq, week_no = weeks)
+```
+
+```{r}
+df_unique_movements_cheshire_week <- 
+                        df_unique_movements_cheshire %>% 
+                        left_join(df_week, by = c("movement_date" = "date"))
+```
+
+```{r}
+df_unique_births_cheshire_week <- 
+                        df_unique_births_cheshire %>% 
+                        left_join(df_week, by = c("movement_date" = "date"))
+```
+
+```{r}
+df_unique_deaths_cheshire_week <- 
+                        df_unique_deaths_cheshire %>% 
+                        left_join(df_week, by = c("movement_date" = "date"))
+```
+
+```{r}
+df_unique_tests_cheshire_week <- 
+                        df_unique_tests_cheshire %>% 
+                        left_join(df_week, by = c("test_date" = "date"))
+```
+
+```{r}
+
+rm(min_date_movements, min_date_births, min_date_deaths, min_date_testing)
+rm(max_date_movements, max_date_births, max_date_deaths, max_date_testing)
+rm(min_date, max_date, date_seq, weeks, df_week)
+rm(df_unique_births_cheshire, df_unique_deaths_cheshire, df_unique_movements_cheshire, df_unique_tests_cheshire)
+```
+
+
+# Data Cleaning
+
+The simulation takes slaughter actions to be positive test results, and in the synthetic data simulation, removes animals from the population after generating positive test results. In the data, these however are two separate steps, a slaughter action is assigned, and then there may be a number of movements and then a death event following that assignment. This is due to the stochastic nature of the simulation and that it does not fully adhere to the movement or testing data. As a result we need to identify any movements or death associated with a cattle assigned to slaughter, and remove it.
+
+When it comes to making inference for the data, we will rely entirely on the movement database for the population sizes, and only use the testing data to estimate efficacy of the tests.
+
+
+## Testing data
+
+This function cleans the data so that there is only one entry per cattle per cph per week. Sometimes cattle are tested multiple times in a week, perhaps with different tests. We are only interested in the number of cattle tested and number of cattle sent to slaughter. We calculate the counts of these things per week and then aggregate to a single record for each cph per week.
+
+```{r}
+
+df_tests_aggregated_cph_week_counts <-
+  df_unique_tests_cheshire_week %>%
+  group_by(eartag, week_no, cph) %>% 
+  mutate(tests_of_eartag_that_week = n()) %>% 
+  arrange(desc(tests_of_eartag_that_week), eartag, week_no, desc(category)) %>% 
+  slice(1) %>%
+  ungroup() %>% 
+  group_by(cph, week_no) %>% 
+  mutate(number_of_tests = n(),
+         number_of_slaughtered = sum(action == "S")) %>% 
+  slice(1) %>% 
+  select(cph, county_name, week_no, number_of_tests, number_of_slaughtered) %>% 
+  arrange(week_no, desc(number_of_tests), desc(number_of_slaughtered))
+
+```
+
+
+
+## Death data and Movement data for slaughtered cattle
+
+In our simulation we will be generating our own tests results, so we do not wish to process the slaughter of cattle for positive tests from the data. Here we identify the death records that are associated with positive cattle and remove them. We also do the same for any movements that occurs after the positive test date.
+
+```{r}
+# Identify any cattle that were sent to slaughter
+
+df_unique_tests_cheshire_week_slaughtered <-
+  df_unique_tests_cheshire_week %>%
+  filter(action == "S") %>% 
+  arrange(cph, test_date, eartag)
+
+slaughter_tests_eartag <-
+  df_unique_tests_cheshire_week_slaughtered %>% 
+  pull(eartag) %>% 
+  unique()
+# We notice here that the number of unique eartags are less than the number records
+# Indicating that some cattle are assigned the slaughter action twice
+# This is because they get different tests on the same day but the same action
+# Later the data should be cleaned to have one action per eartag, before aggregating to counts per week
+```
+
+```{r}
+# Movements associated with slaughtered cattle
+
+slaughter_movement_eartag <-
+  df_unique_movements_cheshire_week %>% 
+  filter(eartag %in% slaughter_tests_eartag) %>% 
+  pull(eartag) %>% 
+  unique()
+
+# Deaths associated with slaughtered cattle
+
+slaughter_death_eartag <-
+  df_unique_deaths_cheshire_week %>% 
+  filter(eartag %in% slaughter_tests_eartag) %>% 
+  pull(eartag) %>% 
+  unique()
+
+# There are 99 slaughtered cattle that don't have moves or deaths
+
+slaughter_movement_or_death_eartag = unique(c(slaughter_movement_eartag, slaughter_death_eartag))
+
+slaughter_action_without_movement_or_death_eartag = setdiff(slaughter_tests_eartag, slaughter_movement_or_death_eartag)
+
+# This is fine for the simulation, where the testing records aren't used except to estimate initial conditions.
+# It is odd but still okay for the real data model, where we will again rely on the movement and death records.
+
+```
+
+```{r}
+
+# Filter out movements and deaths associated with cattle after being assigned for slaughter
+
+# 1) Extract the eartag and date of slaughter action test
+slaughtered_cattle_eartag_and_slaughter_action_date <-
+  df_unique_tests_cheshire_week_slaughtered %>% 
+  arrange(eartag, test_date) %>%
+  group_by(eartag) %>%
+  slice_head(n=1) %>% 
+  select(eartag, test_date) %>% 
+  ungroup()
+
+# 2) Filter movements and deaths to not contain any records that match the eartag AND also have the movement date be greater than or equal to the test date
+
+df_unique_movements_cheshire_week_exc_slaughtered <-
+  df_unique_movements_cheshire_week %>%
+  left_join(slaughtered_cattle_eartag_and_slaughter_action_date, by = "eartag") %>%
+  filter(is.na(test_date) | (movement_date < test_date))%>%
+  select(-test_date)
+
+df_unique_deaths_cheshire_week_exc_slaughtered <-
+  df_unique_deaths_cheshire_week %>%
+  left_join(slaughtered_cattle_eartag_and_slaughter_action_date, by = "eartag") %>%
+  filter(is.na(test_date) | (movement_date < test_date))%>%
+  select(-test_date)
+
+```
+
+```{r}
+rm(slaughter_action_without_movement_or_death_eartag, slaughter_movement_or_death_eartag)
+rm(slaughter_death_eartag, slaughter_movement_eartag, slaughter_tests_eartag)
+rm(slaughtered_cattle_eartag_and_slaughter_action_date)
+rm(df_unique_deaths_cheshire_week, df_unique_movements_cheshire_week)
+```
+
+
+We now have a dataframe of the unique movements excluding those that occurred after a cattle tested positive and was assigned the slaughter action. We have the same for the deaths.
+
+```{r}
+# We now need a set of tests that contains only one test for each eartag per farm per week.
+# As we are aggregating to the population and week level, the aggregation will record two tests for one cow as two separate cattle.
+# The test data is not utilised in the simulation inference.
+
+df_unique_tests_cheshire_week_slaughtered_singular <-
+  df_unique_tests_cheshire_week_slaughtered %>% 
+  group_by(eartag) %>% 
+  filter(category == 'TBSKINTEST' | category == 'GAMMA') %>% 
+  arrange(week_no, cph, eartag, desc(category)) %>% 
+  slice(1) %>% 
+  ungroup()
+
+# This array contains one record for each slaughtered cow, preferring the TBSKINTEST over the GAMMA test when the gamma is a follow up test.
+# Cattle should only be sent to slaughter once in their lifetime, so no cattle-week pair should occur at two distinct points in this data.
+
+```
+
+```{r}
+rm(df_unique_tests_cheshire_week_slaughtered)
+```
+
+
+# Data Aggregation
+
+We want to aggregate the data into (cph, week_no) groups. 
+
+## Movements
+
+The movements will be aggregated into (cph_off, cph_on, week_no) groups.
+
+For each movement record we have the eartag that was moved, where they came from, and where they went. We have already removed all duplicate and self-moves, as well as moves associated with deaths in the same week.
+
+We now wish to create a singular record for each cow each week, with their initial starting destination and their final ending destination. We then want to aggregate all the moves from one farm to another during each week into a single record with counts.
+
+```{r Aggregating Movements}
+
+df_movements_aggregated_to_one_per_eartag_per_week <-
+  df_unique_movements_cheshire_week_exc_slaughtered %>%
+  group_by(eartag, week_no) %>%
+  mutate(first_off_cph = off_cph[which.min(movement_id)],
+         first_off_county = off_county[which.min(movement_id)],
+         first_off_parish = off_parish[which.min(movement_id)],
+         first_off_holding = off_holding[which.min(movement_id)],
+         first_off_county_name = off_county_name[which.min(movement_id)]) %>%
+  mutate(last_on_cph = on_cph[which.max(movement_id)],
+         last_on_county = on_county[which.max(movement_id)],
+         last_on_parish = on_parish[which.max(movement_id)],
+         last_on_holding = on_holding[which.max(movement_id)],
+         last_on_county_name = on_county_name[which.max(movement_id)]) %>% 
+  ungroup() %>% 
+  group_by(eartag, week_no, first_off_cph, last_on_cph) %>% 
+  slice_head(n = 1) %>% 
+  select(eartag, week_no, 
+         first_off_cph, first_off_county, first_off_parish, first_off_holding, first_off_county_name,
+         last_on_cph, last_on_county, last_on_parish, last_on_holding, last_on_county_name)
+
+
+
+```
+
+
+```{r Aggregating Movements to farm pairs}
+
+# First give every farm in Cheshire a cph = -1
+# Then filter out the movements between farms outside of Cheshire
+
+df_movements_aggregated_farm_pairs_week <-
+  df_movements_aggregated_to_one_per_eartag_per_week %>% 
+  ungroup() %>% 
+  mutate(first_off_cph = ifelse((first_off_county == 6), first_off_cph, -1),
+         last_on_cph = ifelse((last_on_county == 6), last_on_cph, -1),
+         first_off_cph = ifelse(is.na(first_off_county), -1, first_off_cph),
+         last_on_cph = ifelse(is.na(last_on_county), -1, last_on_cph)) %>% 
+  mutate(first_off_county = ifelse((first_off_cph == -1), -1, first_off_county),
+         first_off_parish = ifelse((first_off_cph == -1), -1, first_off_parish),
+         first_off_holding = ifelse((first_off_cph == -1), -1, first_off_holding),
+         first_off_county_name = ifelse((first_off_cph == -1), -1, first_off_county_name),
+         last_on_county = ifelse((last_on_cph == -1), -1, last_on_county),
+         last_on_parish = ifelse((last_on_cph == -1), -1, last_on_parish),
+         last_on_holding = ifelse((last_on_cph == -1), -1, last_on_holding),
+         last_on_county_name = ifelse((last_on_cph == -1), -1, last_on_county_name)) %>% 
+  arrange(week_no, first_off_cph, last_on_cph) %>%
+  group_by(first_off_cph, last_on_cph, week_no) %>% 
+  mutate(n_moves_off = n()) %>% 
+  slice(1) %>%
+  filter(last_on_cph != first_off_cph) %>% 
+  select(-eartag) %>% 
+  arrange(week_no, first_off_cph, last_on_cph)
+
+```
+
+```{r}
+rm(df_movements_aggregated_to_one_per_eartag_per_week)
+rm(df_unique_movements_cheshire_week_exc_slaughtered)
+```
+
+
+## Births and Deaths
+
+```{r}
+
+df_births_aggregated_farm_week <-
+  df_unique_births_cheshire_week %>%
+  select(eartag, week_no, movement_date, on_cph, on_county, on_parish, on_holding, on_county_name) %>% 
+  group_by(on_cph, week_no) %>% 
+  mutate(total_births = n()) %>%
+  slice(1) %>% 
+  select(week_no, on_cph, on_county, on_parish, on_holding, on_county_name, total_births)
+```
+
+
+```{r}
+
+df_deaths_aggregated_farm_week <-
+  df_unique_deaths_cheshire_week_exc_slaughtered %>%
+  select(eartag, week_no, movement_date, off_cph, off_county, off_parish, off_holding, off_county_name) %>% 
+  group_by(off_cph, week_no) %>% 
+  mutate(total_deaths = n()) %>% 
+  slice(1) %>% 
+  select(week_no, off_cph, off_county, off_parish, off_holding, off_county_name, total_deaths)
+
+
+```
+
+
+
+
+
+
+# Initial conditions
+
+We need to estimate the number of infected cattle on each farm at the beginning of the data. All the farms that sent cattle to slaughter are the ones with confirmed cases. So we will extract the results of the first
+
+In the following we look at all the tests in the first 6 months, and the total number of cattle sent to slaughter. This made the most sense as the disease is very slow to progress. The test doesn't have perfect specificity, but also, this is a mix of TB skin tests and Gamma tests, where the Gamma tests have better specificity, and some cattle will naturally have been tested more than once in 6 months, which improves the likelihood of detecting the infected cattle overall. Thus we choose to adjust the proportion detected by dividing by 80%, to be conservative and assume the country is more infected than detected.
+
+```{r}
+
+df_tests_aggregated_cph_6_months <-
+  df_tests_aggregated_cph_week_counts %>% 
+  filter(week_no < 26) %>%
+  arrange(cph, desc(number_of_slaughtered)) %>% 
+  group_by(cph) %>% 
+  summarise(total_tests = sum(number_of_tests), total_slaughtered = sum(number_of_slaughtered)) %>% 
+  mutate(prop_positive = total_slaughtered / total_tests) %>% 
+  mutate(prop_positive_adjusted = prop_positive/0.8)
+
+```
+
+We now want to get the initial size of each farm, and multiply by the adjusted proportion testing positive, to get an estimate for the number infected on each farm at the beginning of the process.
+
+```{r}
+
+df_initial_conditions <-
+  df_historical_herd_cheshire %>% 
+  arrange(cph, year, month) %>% 
+  group_by(cph) %>% 
+  slice(1) %>% 
+  left_join(df_tests_aggregated_cph_6_months, by = c("cph")) %>% 
+  select(cph, county, parish, holding, county_name, year, month, num_animals, prop_positive_adjusted) %>% 
+  mutate(num_animals = ifelse((year == 2012 && month == 1), num_animals, 0)) %>% 
+  mutate(num_infected = ceiling(num_animals*prop_positive_adjusted)) %>% 
+  mutate(num_infected = ifelse(is.na(num_infected), 0, num_infected)) %>%
+  mutate(num_not_infected = num_animals - num_infected) %>% 
+  select(cph, county, parish, holding, county_name, num_animals, num_not_infected, num_infected)
+
+```
+
+
+
+# Save the aggregated results
+
+```{r}
+saveRDS(df_movements_aggregated_farm_pairs_week, 'Data/df_movements_aggregated_farm_pairs_week.rds')
+saveRDS(df_tests_aggregated_cph_week_counts, 'Data/df_tests_aggregated_cph_week_counts.rds')
+saveRDS(df_initial_conditions, 'Data/df_initial_conditions.rds')
+
+saveRDS(df_births_aggregated_farm_week, 'Data/df_births_aggregated_farm_week.rds')
+saveRDS(df_deaths_aggregated_farm_week, 'Data/df_deaths_aggregated_farm_week.rds')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,221 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Bovine TB: Exploratory Data Analysis"
+author: "Benjamen Simon"
+date: "February 2023"
+knit: (function(inputFile, encoding) { 
+          rmarkdown::render(
+            inputFile,
+            encoding = encoding, 
+            output_dir = "../Reports") 
+            })
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{enumerate}
+  - \usepackage{bm}
+  - \usepackage[T1]{fontenc}
+---
+
+# Preamble
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE)
+
+options(scipen=999)
+```
+
+This file is used to process the Bovine Tuberculosis data from the APHA, aggregating it to the farm and week level, for use in the inference model. This file focuses on Cheshire.
+
+The packages we will use:
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(RPostgreSQL)
+library(lubridate)
+```
+
+Connecting to the database
+
+```{r Connecting to the DB, echo= FALSE, eval= FALSE}
+
+# Save the password that we can "hide" it as best as we can by collapsing it
+pw <- {
+  "BtbPhD2019"
+}
+ 
+# Loads the PostgreSQL driver
+drv <- dbDriver("PostgreSQL")
+
+# Creates a connection to the postgres database
+# Note that "con" will be used later in each connection to the database
+con <- dbConnect(drv, dbname = "uk_btb",
+                 host = "fhm-chicas-gis.lancs.ac.uk", port = 5432,
+                 user = "simonb", password = pw)
+
+rm(pw) # Removes the password
+ 
+# Check for the locations_tbl
+dbExistsTable(con, "locations_tbl")
+# TRUE
+
+```
+
+
+# Pull Data
+
+## Historic Herd Size
+
+```{r Cheshire Data: Historical Herd, eval = FALSE}
+
+df_historical_herd_cheshire = dbGetQuery(con, 
+                                          "SELECT hist.cph, loc.county, loc.parish, loc.holding, loc.county_name, hist.year, hist.month, hist.num_animals
+                                           FROM historic_herd_tbl hist
+                                           INNER JOIN (SELECT DISTINCT cph, county, parish, holding, county_name
+                                                          FROM locations_extended_tbl
+                                                       ) loc
+                                                   ON (hist.cph = loc.cph)
+                                          ")
+
+```
+
+
+
+
+
+# Historic Herd
+
+```{r Read: Historical Herd Cheshire}
+
+df_historical_herd_cheshire <- read_rds('Data/df_historical_herd_cheshire.rds')
+
+```
+
+
+## Total number of animals per month per year
+
+
+```{r}
+
+df_historical_herd_cheshire %>% 
+  mutate_at(vars(-num_animals), as.factor) %>% 
+  group_by(year, month) %>%
+  summarize(counts = sum(num_animals)) %>%
+  ggplot(aes(x = year, y = counts, fill = month)) +
+  geom_bar(stat = "identity", position = position_dodge())+
+  scale_fill_brewer(palette = "Paired", labels = c("January", "February", "March","April","May","June","July", "August", "September", "October", "November", "December"))+
+  theme_minimal() +
+  labs(title = "Total number of animals in England and Wales", x = "Year (Month)", y = "Total number of animals", fill = "Month")
+
+```
+
+## Number of animals per farm (banded)
+
+```{r}
+
+ggplot(df_herds %>% count(num_animals), aes(x = num_animals, y=n)) +
+geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
+scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+geom_vline(aes(xintercept = median(num_animals)),
+colour = "red", linetype ="longdash", size = .8) +
+theme_minimal() +
+labs(x = "Number of animals", y = "Number of farms")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

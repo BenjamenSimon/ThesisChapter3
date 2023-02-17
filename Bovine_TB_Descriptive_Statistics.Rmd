@@ -75,6 +75,8 @@ df_count_premesis_type <- read_rds('Tables/df_count_premesis_type.rds')
 
 ```{r Review: Premesis Type}
 
+df_count_premesis_type
+
 df_count_premesis_type_prop <- df_count_premesis_type %>% 
                                mutate(freq = (num_premises_type / sum(num_premises_type )* 100))
 
@@ -93,6 +95,8 @@ df_count_premesis_type_cheshire <- read_rds('Tables/df_count_premesis_type_chesh
 ```
 
 ```{r Review: Premesis Type Cheshire}
+
+df_count_premesis_type_cheshire
 
 df_count_premesis_type_cheshire_prop <- df_count_premesis_type_cheshire %>% 
                                         mutate(freq = (num_premises_type / sum(num_premises_type )* 100))
@@ -203,7 +207,7 @@ df_count_unique_deaths <- read_rds('Tables/df_count_unique_deaths.rds')
 
 df_count_unique_deaths
 
-sprintf("There are %s total births in the data set.", prettyNum(df_count_unique_deaths[1, 1],big.mark=","))
+sprintf("There are %s total deaths in the data set.", prettyNum(df_count_unique_deaths[1, 1],big.mark=","))
 
 ```
 
