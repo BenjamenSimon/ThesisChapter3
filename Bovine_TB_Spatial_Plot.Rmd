@@ -1,0 +1,316 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Bovine TB: Spatial Plot"
+author: "Benjamen Simon"
+date: "February 2023"
+knit: (function(inputFile, encoding) { 
+          rmarkdown::render(
+            inputFile,
+            encoding = encoding, 
+            output_dir = "../Reports") 
+            })
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{enumerate}
+  - \usepackage{bm}
+  - \usepackage[T1]{fontenc}
+---
+
+# Preamble
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, message = FALSE)
+
+options(scipen=999)
+```
+
+This file is used to process the Bovine Tuberculosis data from the APHA, aggregating it to the farm and week level, for use in the inference model. This file focuses on Cheshire.
+
+The packages we will use:
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(ggrepel)
+```
+
+
+Load the files:
+
+```{r}
+
+# Parish boundaries
+APHA_gdb <- sf::st_read(dsn = "Spatial/APHA_England_Wales_Parishes.gdb/APHA_Parishes.gdb")
+
+APHA_shp <- sf::st_read(dsn = "Spatial/APHA_England_Wales_Parishes_shp/APHA_England_Wales_Parishes.shp")
+
+# Holdings
+
+df_all_locations_2 <- read_rds('Spatial/df_all_locations_2.rds')
+
+```
+
+
+Transform files:
+
+```{r}
+
+# Transform to a spatial object
+APHA_spdf <- as(APHA_gdb, "Spatial")
+
+```
+
+Filter to Cheshire:
+
+```{r}
+
+APHA_gdb_chesh <- APHA_gdb[startsWith(as.character(APHA_gdb$COUNTY), "CHESH"), ]
+
+```
+
+Extract the parish id:
+
+```{r}
+
+farm_coords <- 
+  df_all_locations_2 %>% 
+  filter(county == 6) %>% 
+  select(map_x, map_y) %>% 
+  filter(is.na(map_x) == FALSE)
+
+farm_coords_sf <- st_as_sf(farm_coords, coords = c('map_x', 'map_y'), crs = st_crs(APHA_gdb_chesh))
+
+```
+
+```{r}
+
+intee <- st_intersects(farm_coords_sf$geometry, APHA_gdb_chesh)
+
+# APHA_gdb_chesh$P[as.integer(intee)]
+
+parish_number_of_farms <- 
+  farm_coords_sf %>% 
+  mutate( intersection = as.integer(st_intersects(geometry, APHA_gdb_chesh)) ) %>% 
+  mutate( parish_id = ifelse(is.na(intersection), NA, APHA_gdb_chesh$P_NUM[intersection]) )
+
+```
+
+```{r}
+
+P_NUM_COMP <- cbind(parish_number_of_farms, st_coordinates(parish_number_of_farms)) 
+
+df_all_locations_2 %>% 
+  filter(county == 6) %>% 
+  left_join(P_NUM_COMP, by = c("map_x" = "X", "map_y" = "Y")) %>% 
+  mutate(SAME = ifelse(parish == P_NUM, 1, 0)) %>% 
+  arrange(parish) %>% 
+  select(parish, holding, P_NUM, SAME) %>% 
+  group_by(parish) %>% 
+  mutate(num_same = sum(SAME, na.rm = TRUE)) %>% 
+  arrange(num_same)
+
+```
+
+```{r}
+
+cheshire_map_parish_numbers <-
+  ggplot(data = APHA_gdb_chesh) +
+  geom_sf() + 
+  geom_sf_text(aes(label = P_NUM), fun.geometry = sf::st_centroid)+
+  theme_minimal()
+
+```
+
+
+```{r}
+
+ggsave("cheshire_map_parish_numbers.png", plot = cheshire_map_parish_numbers, width = 30, height = 30, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+cheshire_map_parish_numbers_in_use <-
+  APHA_gdb_chesh %>% 
+  mutate(in_use = as.factor(ifelse(P_NUM %in% c(102,635,453,289,467,39, 382), 1, 0))) %>% 
+  ggplot() +
+  geom_sf(aes(fill = in_use)) + 
+  geom_sf_text(aes(label = P_NUM), fun.geometry = sf::st_centroid)+
+  scale_fill_manual(values = c("white", "red")) +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+ggsave("cheshire_map_parish_numbers_in_use.png", plot = cheshire_map_parish_numbers_in_use, width = 30, height = 30, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+cheshire_map_parish_numbers_desired <-
+  APHA_gdb_chesh %>% 
+  mutate(in_use = as.factor(ifelse(P_NUM %in% c(139,354,336,367,349,360,345,347,357,335,344,348,363,404,358,333,359,351,332,342,343,356,327,329), 1, 0))) %>% 
+  ggplot() +
+  geom_sf(aes(fill = in_use)) + 
+  geom_sf_text(aes(label = P_NUM), fun.geometry = sf::st_centroid)+
+  scale_fill_manual(values = c("white", "red")) +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+ggsave("cheshire_map_parish_numbers_desired.png", plot = cheshire_map_parish_numbers_desired, width = 30, height = 30, units = "in", dpi = 300)
+
+```
+
+
+```{r}
+
+ggplot(data = APHA_gdb_chesh) +
+  geom_sf() + 
+  geom_point(data = farm_coords, aes(x = map_x, y = map_y), size = 0.5, 
+        shape = 23, fill = "darkred") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+
+farms <- 
+  df_all_locations_2 %>% 
+  filter(county == 6) %>% 
+  select(county, parish, holding, map_x, map_y) %>% 
+  filter(is.na(map_x) == FALSE)
+  
+farms_sf <- st_as_sf(farms, coords = c('map_x', 'map_y'), crs = st_crs(APHA_gdb_chesh))
+  
+farms_p_num <- 
+  farms_sf %>% 
+  mutate(intersection = as.integer(st_intersects(geometry, APHA_gdb_chesh))) %>% 
+  mutate(P_NUM = ifelse(is.na(intersection), NA, APHA_gdb_chesh$P_NUM[intersection])) %>% 
+  select(county, parish, holding, P_NUM) %>% 
+  st_set_geometry(NULL)
+
+
+parish_results_PNUM <-
+  results_chesh %>%
+  left_join(farms_p_num, by = c("county", "parish", "holding")) %>% 
+  select(t, county, parish, holding, cS, cE, cI, bS, bE, bI, move_res, P_NUM) %>% 
+  filter(is.na(P_NUM) == FALSE) %>% 
+  group_by(t, P_NUM) %>% 
+  mutate(parish_cS = sum(cS),
+         parish_cE = sum(cE),
+         parish_cI = sum(cI),
+         parish_bS = sum(bS),
+         parish_bE = sum(bE),
+         parish_bI = sum(bI)) %>% 
+  select(t, county, parish, P_NUM, parish_cS, parish_cE, parish_cI, parish_bS, parish_bE, parish_bI) %>% 
+  slice(1)
+
+parishs_we_have <-
+  parish_results_PNUM %>% 
+  pull(P_NUM) %>% 
+  unique()
+
+parishes_in_map <-
+  APHA_gdb_chesh %>% 
+  pull(P_NUM) %>% 
+  unique()
+
+parishes_to_add <-
+  setdiff(parishes_in_map, parishs_we_have)
+
+df_par_to_add <- data.frame(t = rep(1:100, 28),
+                            county = NA, parish = NA,
+                            P_NUM = rep(parishes_to_add, each = 100),
+                            parish_cS = 0, parish_cE = 0, parish_cI = 0,
+                            parish_bS = 0, parish_bE = 0, parish_bI = 0)
+
+parish_res_to_plot <- 
+  rbind.data.frame(parish_results_PNUM, df_par_to_add) %>% 
+  arrange(t)
+
+df_par_t_1 <-
+  parish_res_to_plot %>% 
+  filter(t == 1)
+
+APHA_gdb_chesh_t1 <-
+  APHA_gdb_chesh %>% 
+  left_join(df_par_t_1, by = "P_NUM")
+
+
+ggplot(data = APHA_gdb_chesh_t1) +
+  geom_sf(aes(fill = parish_cI)) +
+    scale_fill_viridis_c(option = "plasma", trans = "sqrt") +
+  theme_minimal()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+# Whole country plot
+
+```{r}
+
+county_data <- APHA_gdb %>%
+  group_by(COUNTY, C_NUM) %>%
+  summarize() %>%
+  st_as_sf()
+
+```
+
+
+```{r}
+ggplot(data = county_data) +
+  geom_sf(aes(fill = C_NUM)) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  geom_sf_text(aes(label = COUNTY), fun.geometry = sf::st_centroid) + 
+  theme_minimal()
+```
+
+```{r}
+df_unique_births %>% 
+  na.omit() %>% 
+  group_by(county_name) %>% 
+  summarise(total_births = sum(num_births))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

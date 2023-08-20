@@ -336,6 +336,25 @@ df_tests_aggregated_cph_week_counts <-
 
 ```
 
+```{r}
+
+df_tests_aggregated_cph_week_counts_WHTs <-
+  df_unique_tests_cheshire_week %>%
+  filter(test_type %in% c("VE-12M", "VE-6M", "VE-CON", "VE-CON12", "VE-RHT24/36", "VE-RHT48", "VE-SI", "VE-WHT", "VE-WHT2", "VE-CT(EM)","VE-CT-NH1", "VE-CT-NH2")) %>% 
+  group_by(eartag, week_no, cph) %>% 
+  mutate(tests_of_eartag_that_week = n()) %>% 
+  arrange(desc(tests_of_eartag_that_week), eartag, week_no, desc(category)) %>% 
+  slice(1) %>%
+  ungroup() %>% 
+  group_by(cph, week_no) %>% 
+  mutate(number_of_tests = n(),
+         number_of_slaughtered = sum(action == "S")) %>% 
+  slice(1) %>% 
+  select(cph, county_name, week_no, number_of_tests, number_of_slaughtered) %>% 
+  arrange(week_no, desc(number_of_tests), desc(number_of_slaughtered))
+
+```
+
 
 
 ## Death data and Movement data for slaughtered cattle
@@ -602,6 +621,7 @@ df_initial_conditions <-
 ```{r}
 saveRDS(df_movements_aggregated_farm_pairs_week, 'Data/df_movements_aggregated_farm_pairs_week.rds')
 saveRDS(df_tests_aggregated_cph_week_counts, 'Data/df_tests_aggregated_cph_week_counts.rds')
+saveRDS(df_tests_aggregated_cph_week_counts_WHTs, 'Data/df_tests_aggregated_cph_week_counts_WHTs.rds')
 saveRDS(df_initial_conditions, 'Data/df_initial_conditions.rds')
 
 saveRDS(df_births_aggregated_farm_week, 'Data/df_births_aggregated_farm_week.rds')
@@ -609,9 +629,31 @@ saveRDS(df_deaths_aggregated_farm_week, 'Data/df_deaths_aggregated_farm_week.rds
 ```
 
 
+```{r}
+df_initial_conditions = readRDS('Data/df_initial_conditions.rds')
+
+df_tests_aggregated_cph_week_counts = readRDS('Data/df_tests_aggregated_cph_week_counts.rds')
+```
+
+```{r}
+df_initial_conditions %>% 
+  arrange(desc(num_infected), desc(num_animals))
+```
+```{r}
+df_tests_aggregated_cph_week_counts %>% 
+  filter(cph == 62640016)
+```
+
+```{r}
+df_tests_aggregated_cph_week_counts %>% 
+  filter(cph == 62880014)
+```
 
 
-
+```{r}
+df_tests_aggregated_cph_week_counts_WHTs %>% 
+  filter(cph == 60320054)
+```
 
 
 

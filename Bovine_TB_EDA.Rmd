@@ -35,6 +35,7 @@ library(tidyverse)
 library(ggplot2)
 library(RPostgreSQL)
 library(lubridate)
+library(sf)
 ```
 
 Connecting to the database
@@ -70,16 +71,291 @@ dbExistsTable(con, "locations_tbl")
 
 ```{r Cheshire Data: Historical Herd, eval = FALSE}
 
-df_historical_herd_cheshire = dbGetQuery(con, 
-                                          "SELECT hist.cph, loc.county, loc.parish, loc.holding, loc.county_name, hist.year, hist.month, hist.num_animals
-                                           FROM historic_herd_tbl hist
-                                           INNER JOIN (SELECT DISTINCT cph, county, parish, holding, county_name
-                                                          FROM locations_extended_tbl
-                                                       ) loc
-                                                   ON (hist.cph = loc.cph)
-                                          ")
+df_historical_herd = dbGetQuery(con, 
+                                    "SELECT hist.cph, loc.county, loc.parish, loc.holding, loc.county_name, hist.year, hist.month, hist.num_animals
+                                     FROM historic_herd_tbl hist
+                                     INNER JOIN (SELECT DISTINCT cph, county, parish, holding, county_name
+                                                    FROM locations_extended_tbl
+                                                 ) loc
+                                             ON (hist.cph = loc.cph)
+                                    ")
 
 ```
+
+```{r}
+
+df_historical_herd_clean <-
+  df_historical_herd %>% 
+  group_by(cph, county, parish, holding, county_name, year, month) %>% 
+  summarise(num_animals = sum(num_animals)) %>% 
+  ungroup()
+
+```
+
+```{r}
+rm(df_historical_herd)
+```
+
+
+## Movements
+
+```{r}
+
+df_unique_movements_per_animal = dbGetQuery(con, 
+                                            "SELECT eartag, COUNT(*) as num_movements
+                                            FROM (
+                                                   SELECT eartag, movement_date, movement_id, 
+                                                          off_cph, off_county, off_parish, off_holding, off_county_name, 
+                                                          on_cph, on_county, on_parish, on_holding, on_county_name, 
+                                                          movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+                                                   FROM moves_no_dups_with_sameday_death_tbl
+                                            ) df_unique_movements
+                                            GROUP BY eartag
+                                            ")
+```
+
+```{r}
+
+df_unique_movements_on_off_per_county = dbGetQuery(con, 
+                                                    "SELECT t1.off_county_name AS county_name, t1.count AS off_count, t2.count as on_count
+                                                    FROM 
+                                                      (SELECT off_county_name, COUNT(*) as count FROM moves_no_dups_with_sameday_death_tbl GROUP BY off_county_name) as t1
+                                                      JOIN
+                                                      (SELECT on_county_name, COUNT(*) as count FROM moves_no_dups_with_sameday_death_tbl GROUP BY on_county_name) as t2
+                                                      ON t1.off_county_name = t2.on_county_name
+                                                    ORDER BY county_name
+                                                    ")
+```
+
+
+
+## Births and Deaths
+
+```{r}
+
+df_unique_births = dbGetQuery(con, 
+    "SELECT on_county_name AS county_name, movement_date_year AS year, movement_date_month AS month, COUNT(*) as num_births
+                                            FROM (
+                                                   SELECT eartag, movement_date, 
+                                                          off_cph, off_county, off_parish, off_holding, off_county_name, 
+                                                          on_cph, on_county, on_parish, on_holding, on_county_name, 
+                                                          movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+                                                   FROM births_no_dups_tbl
+                                            ) df_unique_births
+    GROUP BY movement_date_month, movement_date_year, on_county_name
+    ORDER BY on_county_name, movement_date_year, movement_date_month
+     "
+    )
+
+```
+
+
+```{r}
+
+df_unique_deaths = dbGetQuery(con, 
+    "SELECT off_county_name AS county_name, movement_date_year AS year, movement_date_month AS month, COUNT(*) as num_deaths
+                                            FROM (
+                                                   SELECT eartag, movement_date, 
+                                                          off_cph, off_county, off_parish, off_holding, off_county_name, 
+                                                          on_cph, on_county, on_parish, on_holding, on_county_name, 
+                                                          movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+                                                   FROM deaths_no_dups_tbl
+                                            ) df_unique_deaths
+    GROUP BY movement_date_month, movement_date_year, off_county_name
+    ORDER BY off_county_name, movement_date_year, movement_date_month
+     "
+    )
+
+```
+
+
+## Movement patterns in time
+
+```{r}
+
+df_unique_movements_per_dow = dbGetQuery(con, 
+                                            "SELECT movement_date_dow, movement_date_month, movement_date_year, COUNT(*) as num_movements
+                                            FROM (
+                                                   SELECT eartag, movement_date, movement_id, 
+                                                          off_cph, off_county, off_parish, off_holding, off_county_name, 
+                                                          on_cph, on_county, on_parish, on_holding, on_county_name, 
+                                                          movement_date_day, movement_date_month, movement_date_year, movement_date_dow
+                                                   FROM moves_no_dups_with_sameday_death_tbl
+                                            ) df_unique_movements
+                                            GROUP BY movement_date_dow, movement_date_month, movement_date_year
+                                            ")
+```
+
+
+
+## Testing
+
+```{r}
+
+df_total_tests_dates = dbGetQuery(con, 
+    "SELECT test_date_dow, test_date_month, test_date_year, COUNT(*)
+     FROM tests_no_dups_extended
+     GROUP BY test_date_dow, test_date_month, test_date_year
+    ")
+
+```
+
+
+```{r}
+
+df_total_tests_by_category = dbGetQuery(con, 
+    "SELECT category, test_date_year, COUNT(*)
+     FROM tests_no_dups_extended
+     GROUP BY category, test_date_year
+    ")
+
+```
+
+```{r}
+
+df_total_tests_by_action = dbGetQuery(con, 
+    "SELECT category, action, test_date_year, COUNT(*)
+     FROM tests_no_dups_extended
+     GROUP BY category, action, test_date_year
+    ")
+
+```
+
+
+
+Load the shape files:
+
+```{r}
+
+# Parish boundaries
+APHA_gdb <- sf::st_read(dsn = "Spatial/APHA_England_Wales_Parishes.gdb/APHA_Parishes.gdb")
+
+APHA_shp <- sf::st_read(dsn = "Spatial/APHA_England_Wales_Parishes_shp/APHA_England_Wales_Parishes.shp")
+
+```
+
+```{r}
+
+county_shape_data <- APHA_gdb %>%
+  group_by(COUNTY, C_NUM) %>%
+  summarize() %>%
+  st_as_sf()
+
+```
+
+
+```{r}
+# Rows to combine (names "London" and "East London")
+names_to_combine <- c("GREATER LONDON", "GREATER LONDON - EAST")
+
+# Filter the rows with the specified names
+rows_to_combine <- county_shape_data %>% filter(COUNTY %in% names_to_combine)
+
+GL_row = county_shape_data[(county_shape_data$COUNTY == "GREATER LONDON"), ]
+
+GL_row$Shape = st_union(rows_to_combine$Shape)
+
+# Filter out the original rows that were combined
+county_shape_data_modified <- county_shape_data %>% filter(!COUNTY %in% names_to_combine)
+
+# Add the new row to the original data frame
+county_shape_data_modified <- rbind(county_shape_data_modified, GL_row)
+
+```
+
+
+```{r}
+# Rows to combine (names "London" and "East London")
+names_to_combine <- c("HEREFORDSHIRE, COUNTY OF", "WORCESTERSHIRE")
+
+# Filter the rows with the specified names
+rows_to_combine <- county_shape_data %>% filter(COUNTY %in% names_to_combine)
+
+HW_row = county_shape_data[(county_shape_data$COUNTY == "HEREFORDSHIRE, COUNTY OF"), ]
+
+HW_row$COUNTY = "HEREFORD & WORCESTER"
+HW_row$Shape = st_union(rows_to_combine$Shape)
+
+# Filter out the original rows that were combined
+county_shape_data_modified <- county_shape_data_modified %>% filter(!COUNTY %in% names_to_combine)
+
+# Add the new row to the original data frame
+county_shape_data_modified <- rbind(county_shape_data_modified, HW_row)
+
+```
+
+
+```{r}
+# Rows to combine (names "London" and "East London")
+names_to_combine <- c("NORTH POWYS", "SOUTH POWYS")
+
+# Filter the rows with the specified names
+rows_to_combine <- county_shape_data %>% filter(COUNTY %in% names_to_combine)
+
+PW_row = county_shape_data[(county_shape_data$COUNTY == "NORTH POWYS"), ]
+
+PW_row$COUNTY = "POWYS"
+PW_row$Shape = st_union(rows_to_combine$Shape)
+
+# Filter out the original rows that were combined
+county_shape_data_modified <- county_shape_data_modified %>% filter(!COUNTY %in% names_to_combine)
+
+# Add the new row to the original data frame
+county_shape_data_modified <- rbind(county_shape_data_modified, PW_row)
+
+```
+
+```{r}
+
+county_shape_data_modified[(county_shape_data_modified$C_NUM == 50), ]$COUNTY = "NORTH YORKSHIRE (SOUTHERN)"
+
+```
+
+
+
+```{r}
+county_shape_data_modified <- county_shape_data_modified %>%
+  mutate(COUNTY = case_when(
+    COUNTY == "DEVONSHIRE" ~ "DEVON",
+    COUNTY == "GREATER MANCHESTER" ~ "GREATER  MANCHESTER",
+    COUNTY == "HERTFORD" ~ "HERTFORDSHIRE",
+    COUNTY == "LEICESTER" ~ "LEICESTERSHIRE",
+    TRUE ~ COUNTY 
+  ))
+
+
+county_shape_data_modified <-  county_shape_data_modified[order(county_shape_data_modified$COUNTY), ]
+```
+
+```{r}
+county_shape_data_modified <- county_shape_data_modified %>% st_as_sf()
+```
+
+```{r}
+rm(APHA_gdb, APHA_shp)
+rm(rows_to_combine, GL_row, HW_row, PW_row, names_to_combine)
+rm(county_shape_data)
+```
+
+
+
+```{r}
+#map_names_plot <- 
+  ggplot(data = county_shape_data_modified) +
+  geom_sf(aes(fill = C_NUM)) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  geom_sf_text(aes(label = COUNTY), fun.geometry = sf::st_centroid) + 
+  theme_minimal()
+```
+
+
+```{r}
+
+ggsave("map_names_plot.png", plot = map_names_plot, width = 20, height = 40, units = "in", dpi = 300)
+
+```
+
+
 
 
 
@@ -87,42 +363,464 @@ df_historical_herd_cheshire = dbGetQuery(con,
 
 # Historic Herd
 
-```{r Read: Historical Herd Cheshire}
-
-df_historical_herd_cheshire <- read_rds('Data/df_historical_herd_cheshire.rds')
-
-```
-
-
 ## Total number of animals per month per year
 
 
 ```{r}
 
-df_historical_herd_cheshire %>% 
+HH_plot <-
+  df_historical_herd_clean %>% 
   mutate_at(vars(-num_animals), as.factor) %>% 
   group_by(year, month) %>%
-  summarize(counts = sum(num_animals)) %>%
-  ggplot(aes(x = year, y = counts, fill = month)) +
-  geom_bar(stat = "identity", position = position_dodge())+
-  scale_fill_brewer(palette = "Paired", labels = c("January", "February", "March","April","May","June","July", "August", "September", "October", "November", "December"))+
+  summarize(counts = sum(num_animals)) %>% 
+  ggplot(aes(x = month, y = counts, group = year, color = year)) +
+  geom_line()+
+  labs(x = "Month", y = "Count", color = "Year")+
   theme_minimal() +
-  labs(title = "Total number of animals in England and Wales", x = "Year (Month)", y = "Total number of animals", fill = "Month")
+  labs(title = "Total number of animals in England and Wales", x = "Month", y = "Total number of animals")
 
 ```
+
+```{r}
+
+ggsave("Figures/Total number of animals in England and Wales.png", plot = HH_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
 
 ## Number of animals per farm (banded)
 
 ```{r}
+df_hist_herd_grouped <-
+  df_historical_herd_clean %>% 
+  mutate(bands = cut(num_animals, breaks = c(0, 5, 10, 20, 50, 100, 200, 500, 750, 1000, 2000, 5000, Inf), labels = c("1-5", "6-10", "11-20", "21-50", "51-100", "101-200", "201-500", "501-750", "751-1000", "1001-2000", "2001-5000", "5000+"))) %>% 
+  mutate(bands = as.factor(bands))
 
-ggplot(df_herds %>% count(num_animals), aes(x = num_animals, y=n)) +
-geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
-scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
-scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-geom_vline(aes(xintercept = median(num_animals)),
-colour = "red", linetype ="longdash", size = .8) +
-theme_minimal() +
-labs(x = "Number of animals", y = "Number of farms")
+```
+
+
+```{r}
+HH_grouped_plot <-
+  ggplot(df_hist_herd_grouped, aes(x = bands)) +
+  geom_bar(color="darkblue", fill = "lightblue")+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(title = "Average number of animals per farm", x = "Number of animals", y = "Number of observations (farms by month)")
+```
+
+```{r}
+
+ggsave("Figures/Average number of animals per farm.png", plot = HH_grouped_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+## Average number of animals per county
+
+```{r}
+df_historical_herd_summary <-
+  df_historical_herd_clean %>%
+  group_by(county_name, month, year) %>%
+  summarize(total_animals = sum(num_animals)) %>%
+  group_by(county_name) %>%
+  summarize(avg_animals = mean(total_animals), se = sd(total_animals) / sqrt(n()))
+```
+
+```{r}
+
+HH_by_county_plot <-
+  ggplot(df_historical_herd_summary, aes(x = county_name, y = avg_animals)) +
+  geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+  geom_errorbar(aes(ymin = avg_animals - se, ymax = avg_animals + se), width = 0.2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("County") +
+  ylab("Average Number of Animals")+
+  labs(title = "Average number of animals per county")
+```
+
+
+```{r}
+
+ggsave("Figures/Average number of animals per county.png", plot = HH_by_county_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+Avg_animals_county_spatial_plot_labels <-
+  county_shape_data %>% 
+  left_join(df_historical_herd_summary, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = avg_animals)) +
+  scale_fill_viridis_c(option = "plasma", name = "Avg. Number of Animals") + 
+  geom_sf_label(aes(label = COUNTY)) + 
+  theme_minimal() +
+  labs(title = "Avg. Number of Animals per County")
+
+```
+
+```{r}
+
+# Avg_animals_county_spatial_plot <-
+  county_shape_data_modified %>% 
+  left_join(df_historical_herd_summary, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = avg_animals)) +
+  scale_fill_viridis_c(option = "plasma", name = "Avg. Number of Animals") + 
+  theme_minimal() +
+  labs(title = "Avg. Number of Animals per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Average number of animals Spatial Labels.png", plot = Avg_animals_county_spatial_plot_labels, width = 18, height = 18, units = "in", dpi = 300)
+
+```
+
+```{r}
+
+ggsave("Figures/Average number of animals Spatial.png", plot = Avg_animals_county_spatial_plot, width = 6, height = 6, units = "in", dpi = 300)
+
+```
+
+
+# Movements
+
+## Number of movements per animal (grouped)
+
+```{r}
+
+df_unique_movements_banded <-
+  df_unique_movements_per_animal %>% 
+  mutate(bands = cut(num_movements, breaks = c(0, 1, 2, 3, 4, 5, 10, 20, 50, 100, Inf), labels = c("1", "2", "3", "4", "5", "6-10", "11-20", "21-50", "51-100", "100+"))) %>% 
+  mutate(bands = as.factor(bands))
+
+```
+
+```{r}
+
+Movements_plot <-
+  ggplot(df_unique_movements_banded, aes(x = bands)) +
+  geom_bar(color="darkblue", fill = "lightblue")+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(title = "Total number of movements per animal",x = "Number of movements", y = "Number of animals")
+
+```
+
+```{r}
+
+ggsave("Figures/Total number of movements per animal.png", plot = Movements_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+## Movements out of each county
+
+```{r}
+
+# convert data to long format
+df_unique_movements_on_off_per_county_long <- tidyr::gather(df_unique_movements_on_off_per_county, key = "count_type", value = "count", -county_name)
+
+```
+
+```{r}
+
+Movements_by_county_plot <-
+  ggplot(df_unique_movements_on_off_per_county_long, aes(x = county_name, y = count, fill = count_type)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4"), labels = c("Off", "On"))+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Total number of movement on and off per county", x = "County", y = "Number of movements")
+
+```
+
+```{r}
+
+ggsave("Figures/Total number of movement on and off per county.png", plot = Movements_by_county_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+```{r}
+
+Moves_off_county_spatial_plot_labels <-
+  county_shape_data %>% 
+  left_join(df_unique_movements_on_off_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = off_count)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Movements Off") + 
+  geom_sf_label(aes(label = COUNTY)) + 
+  theme_minimal() +
+  labs(title = "Total Movements Off per County")
+
+```
+
+```{r}
+
+#Moves_off_county_spatial_plot <-
+  county_shape_data_modified %>% 
+  left_join(df_unique_movements_on_off_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = off_count)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Movements Off") + 
+  theme_minimal() +
+  labs(title = "Total Movements Off per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Moves Off per County Spatial Labels.png", plot = Moves_off_county_spatial_plot_labels, width = 18, height = 18, units = "in", dpi = 300)
+
+```
+
+```{r}
+
+ggsave("Figures/Total Moves Off per County Spatial.png", plot = Moves_off_county_spatial_plot, width = 6, height = 6, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+Moves_on_county_spatial_plot_labels <-
+  county_shape_data %>% 
+  left_join(df_unique_movements_on_off_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = on_count)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Movements On") + 
+  geom_sf_label(aes(label = COUNTY)) + 
+  theme_minimal() +
+  labs(title = "Total Movements On per County")
+
+```
+
+```{r}
+
+# Moves_on_county_spatial_plot <-
+  county_shape_data_modified %>% 
+  left_join(df_unique_movements_on_off_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = on_count)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Movements On") + 
+  theme_minimal() +
+  labs(title = "Total Movements On per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Moves On per County Spatial Labels.png", plot = Moves_on_county_spatial_plot_labels, width = 18, height = 18, units = "in", dpi = 300)
+
+```
+
+```{r}
+
+ggsave("Figures/Total Moves On per County Spatial.png", plot = Moves_on_county_spatial_plot, width = 6, height = 6, units = "in", dpi = 300)
+
+```
+
+
+## Births and Deaths
+
+
+```{r}
+
+
+```
+
+
+```{r}
+
+Births_plot <-
+  df_unique_births %>% 
+  group_by(month, year) %>% 
+  summarise(total_births = sum(num_births)) %>% 
+  arrange(year, month) %>% 
+  ggplot(aes(x = factor(month), y = total_births, group = factor(year), color = factor(year))) +
+  geom_line()+
+  labs(x = "Month", y = "Count", color = "Year")+
+  theme_minimal() +
+  labs(title = "Total Births per Month", x = "Month", y = "Total number of Births")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Births per Month.png", plot = Births_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+```{r}
+
+Deaths_plot <-
+  df_unique_deaths %>% 
+  group_by(month, year) %>% 
+  summarise(total_deaths = sum(num_deaths)) %>% 
+  arrange(year, month) %>% 
+  ggplot(aes(x = factor(month), y = total_deaths, group = factor(year), color = factor(year))) +
+  geom_line()+
+  labs(x = "Month", y = "Count", color = "Year")+
+  theme_minimal() +
+  labs(title = "Total Deaths per Month", x = "Month", y = "Total number of Deaths")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Deaths per Month.png", plot = Deaths_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+ Births_county_plot <-
+  df_unique_births %>% 
+  na.omit() %>% 
+  group_by(county_name) %>% 
+  summarise(total_births = sum(num_births)) %>% 
+  ggplot(aes(x = county_name, y = total_births)) +
+  geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("County") +
+  ylab("Total Births") + 
+  labs(title = "Total Births per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Births per County.png", plot = Births_county_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+```{r}
+df_unique_births_per_county <-
+  df_unique_births %>% 
+  na.omit() %>% 
+  group_by(county_name) %>% 
+  summarise(total_births = sum(num_births))
+```
+
+```{r}
+
+Births_county_spatial_plot_labels <-
+  county_shape_data_modified %>% 
+  left_join(df_unique_births_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_births)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Births") + 
+  geom_sf_label(aes(label = COUNTY)) + 
+  theme_minimal() +
+  labs(title = "Total Births per County")
+
+```
+
+```{r}
+
+# Births_county_spatial_plot <-
+  county_shape_data_modified %>% 
+  left_join(df_unique_births_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_births)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Births") + 
+  theme_minimal() +
+  labs(title = "Total Births per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Births per County Spatial Labels.png", plot = Births_county_spatial_plot_labels, width = 18, height = 18, units = "in", dpi = 300)
+
+```
+
+```{r}
+
+ggsave("Figures/Total Births per County Spatial.png", plot = Births_county_spatial_plot, width = 6, height = 6, units = "in", dpi = 300)
+
+```
+
+
+
+```{r}
+
+Deaths_county_plot <-
+  df_unique_deaths %>% 
+  na.omit() %>% 
+  group_by(county_name) %>% 
+  summarise(total_deaths = sum(num_deaths)) %>% 
+  ggplot(aes(x = county_name, y = total_deaths)) +
+  geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("County") +
+  ylab("Total Deaths") + 
+  labs(title = "Total Deaths per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Deaths per County.png", plot = Deaths_county_plot, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+```{r}
+df_unique_deaths_per_county <-
+  df_unique_deaths %>% 
+  na.omit() %>% 
+  group_by(county_name) %>% 
+  summarise(total_deaths = sum(num_deaths))
+```
+
+```{r}
+
+Deaths_county_spatial_plot_labels <-
+  county_shape_data %>% 
+  left_join(df_unique_deaths_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_deaths)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Deaths") + 
+  geom_sf_label(aes(label = COUNTY)) + 
+  theme_minimal() +
+  labs(title = "Total Deaths per County")
+
+```
+
+```{r}
+
+# Deaths_county_spatial_plot <-
+  county_shape_data_modified %>% 
+  left_join(df_unique_deaths_per_county, by = c('COUNTY' = 'county_name')) %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_deaths)) +
+  scale_fill_viridis_c(option = "plasma", name = "Total Deaths") + 
+  theme_minimal() +
+  labs(title = "Total Deaths per County")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Deaths per County Spatial Labels.png", plot = Deaths_county_spatial_plot_labels, width = 18, height = 18, units = "in", dpi = 300)
+
+```
+
+```{r}
+
+ggsave("Figures/Total Deaths per County Spatial.png", plot = Deaths_county_spatial_plot, width = 6, height = 6, units = "in", dpi = 300)
 
 ```
 
@@ -130,27 +828,193 @@ labs(x = "Number of animals", y = "Number of farms")
 
 
 
+## Movement patterns in time
+
+```{r}
+
+df_unique_movements_by_month <-
+  df_unique_movements_per_dow %>% 
+  group_by(movement_date_month, movement_date_year) %>% 
+  summarise(total_movements = sum(num_movements)) %>% 
+  arrange(movement_date_year, movement_date_month)
+
+```
+
+
+```{r}
+
+Movements_by_month <-
+  df_unique_movements_by_month %>% 
+  ggplot(aes(x = factor(movement_date_month), y = total_movements, group = factor(movement_date_year), color = factor(movement_date_year))) +
+  geom_line()+
+  labs(x = "Month", y = "Count", color = "Year")+
+  theme_minimal() +
+  labs(title = "Total Movements per Month", x = "Month", y = "Total number of Movements")
+
+```
+
+
+```{r}
+
+ggsave("Figures/Total Movements per Month.png", plot = Movements_by_month, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+```{r}
+
+Movements_by_dow <-
+  df_unique_movements_per_dow %>% 
+  group_by(movement_date_dow) %>% 
+  summarise(total_moves = sum(num_movements)) %>% 
+  mutate(movement_date_dow = 
+           stringr::str_remove_all(movement_date_dow, pattern = ' '), 
+         movement_date_dow = as.factor(movement_date_dow)) %>% 
+  mutate(movement_date_dow = fct_relevel(
+    movement_date_dow, 
+    c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"))) %>% 
+  ggplot(aes(x = movement_date_dow, y = total_moves)) +
+  geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Day of the Week") +
+  ylab("Total Movements") +
+  labs(title = "Total Movements per Day of the Week")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Movements per Day of the Week.png", plot = Movements_by_dow, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+## Testing
+
+```{r}
+
+df_unique_tests_by_month <-
+  df_total_tests_dates %>% 
+  group_by(test_date_month, test_date_year) %>% 
+  summarise(total_tests = sum(count)) %>% 
+  arrange(test_date_year, test_date_month)
+
+```
+
+
+```{r}
+
+Tests_per_month <-
+  df_unique_tests_by_month %>% 
+  ggplot(aes(x = factor(test_date_month), y = total_tests, group = factor(test_date_year), color = factor(test_date_year))) +
+  geom_line()+
+  labs(x = "Month", y = "Count", color = "Year")+
+  theme_minimal() +
+  labs(title = "Total Tests per Month", x = "Month", y = "Total number of Tests")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Tests per Month.png", plot = Tests_per_month, width = 12, height = 6, units = "in", dpi = 300)
+
+```
+
+
+```{r}
+
+Tests_per_dow <-
+  df_total_tests_dates %>% 
+  group_by(test_date_dow) %>% 
+  summarise(total_tests = sum(count)) %>% 
+  mutate(test_date_dow = 
+           stringr::str_remove_all(test_date_dow, pattern = ' '), 
+         test_date_dow = as.factor(test_date_dow)) %>% 
+  mutate(test_date_dow = fct_relevel(
+    test_date_dow, 
+    c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"))) %>% 
+  ggplot(aes(x = test_date_dow, y = total_tests)) +
+  geom_bar(stat = "identity", color="darkblue", fill = "lightblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Day of the Week") +
+  ylab("Total Tests") + 
+  labs(title = "Total Tests per Day of the Week")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Tests per Day of the Week.png", plot = Tests_per_dow, width = 12, height = 6, units = "in", dpi = 300)
+
+```
 
 
 
+```{r}
+
+Tests_per_category_per_year <-
+  df_total_tests_by_category %>% 
+  na.omit() %>% 
+  ggplot(aes(x = test_date_year, y = count, fill = category)) +
+  geom_col(position = "dodge", width = 0.8) +
+  scale_fill_discrete(name = "Category") +
+  scale_x_continuous(name = "Year") +
+  scale_y_continuous(name = "Number of Tests") +
+  theme_minimal() + 
+  labs(title = "Total Tests per Category per Year")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Tests per Category per Year.png", plot = Tests_per_category_per_year, width = 12, height = 6, units = "in", dpi = 300)
+
+```
 
 
+```{r}
+
+Tests_results_per_category <-
+  df_total_tests_by_action %>% 
+  na.omit() %>%
+  ggplot(aes(x = category, y = count, fill = action)) +
+  geom_col(position = "dodge", width = 0.8) +
+  scale_fill_discrete(name = "Category") +
+  scale_y_continuous(name = "Number of Tests") +
+  theme_minimal() +
+  labs(title = "Total Test Results per Category")
+
+```
+
+```{r}
+
+ggsave("Figures/Total Test Results per Category.png", plot = Tests_results_per_category, width = 12, height = 6, units = "in", dpi = 300)
+
+```
 
 
+```{r}
 
+Tests_results_per_category_exc_N <-
+  df_total_tests_by_action %>% 
+  na.omit() %>%
+  filter(action != "N") %>% 
+  ggplot(aes(x = category, y = count, fill = action)) +
+  geom_col(position = "dodge", width = 0.8) +
+  scale_fill_discrete(name = "Category") +
+  scale_y_continuous(name = "Number of Tests") +
+  theme_minimal() + 
+  labs(title = "Total Test Results per Category (exc. Negative)")
 
+```
 
+```{r}
 
+ggsave("Figures/Total Test Results per Category exc N.png", plot = Tests_results_per_category_exc_N, width = 12, height = 6, units = "in", dpi = 300)
 
-
-
-
-
-
-
-
-
-
+```
 
 
 
